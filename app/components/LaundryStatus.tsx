@@ -1,0 +1,1 @@
+// For real-time updates/notifications, it needs to be interactive
