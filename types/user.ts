@@ -1,4 +1,4 @@
-type UserType = "admin" | "client";
+export type UserType = "admin" | "client" | "software_owner";
 
 type User = {
   firstName: string;

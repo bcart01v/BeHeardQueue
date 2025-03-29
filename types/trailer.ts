@@ -1,6 +1,7 @@
-type ServiceType = "laundry" | "shower" | "haircut";
+export type ServiceType = "laundry" | "shower" | "haircut";
 
-type Trailer = {
+export type Trailer = {
+  id?: string;
   name: string; // could also be license plate
   serviceType: ServiceType;
   startTime: string;
