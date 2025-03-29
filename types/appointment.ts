@@ -1,10 +1,12 @@
-type TimeBlock =
+import type { ServiceType } from "./trailer";
+
+export type TimeBlock =
   | "early_morning"
   | "late_morning"
   | "early_afternoon"
   | "late_afternoon";
 
-type Appointment = {
+export type Appointment = {
   id: string; // Firestore generated
   serviceType: ServiceType;
   userId: string;
