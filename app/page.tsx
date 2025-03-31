@@ -1,6 +1,7 @@
 // This should be a server side rendered page. 
 
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -14,11 +15,13 @@ export default function Home() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white"
-              >
+              <Link href="/login" passHref>
+                <button
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                >
                 Login
-              </button>
+                </button>
+              </Link>
               <button
                 className="px-4 py-2 text-sm font-medium text-white bg-yellow-400 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
