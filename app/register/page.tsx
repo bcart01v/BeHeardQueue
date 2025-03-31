@@ -1,5 +1,3 @@
-//Typical Register Page
-// Client side rendering
 // app/register/page.tsx
 
 "use client";
@@ -8,35 +6,29 @@ import { useRouter } from "next/navigation";
 import { registerWithEmail } from "@/lib/auth";
 
 const RegisterPage = () => {
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [confirmPassword, setConfirmPassword] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [email, setEmail] = useState<string>(""); // Track email input
+  const [password, setPassword] = useState<string>(""); // Track password input
+  const [confirmPassword, setConfirmPassword] = useState<string>(""); // Track confirm password
   const router = useRouter();
 
   // Handle form submission
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
 
     // Check if passwords match
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      console.error("Passwords do not match.");
       return;
     }
 
     try {
       const user = await registerWithEmail(email, password);
       if (user) {
-        setSuccess("Account created successfully! Redirecting to login...");
-        setTimeout(() => {
-          router.push("/login");
-        }, 2000);
+        // Redirect to login after successful registration
+        router.push("/login");
       }
     } catch (err: any) {
-      setError("Registration failed. Please try again.");
+      console.error("Registration failed:", err.message);
     }
   };
 
@@ -46,13 +38,6 @@ const RegisterPage = () => {
         <h2 className="text-2xl font-bold text-gray-900 text-center">
           Create an Account
         </h2>
-
-        {error && (
-          <p className="mt-4 text-sm text-red-500 text-center">{error}</p>
-        )}
-        {success && (
-          <p className="mt-4 text-sm text-green-500 text-center">{success}</p>
-        )}
 
         <form onSubmit={handleRegister} className="space-y-6 mt-6">
           {/* Email Field */}
