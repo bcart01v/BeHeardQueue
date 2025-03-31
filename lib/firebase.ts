@@ -22,4 +22,4 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // This should only ever run in the client.
-export const messaging = typeof window !== 'undefined' ? getMessaging() : null;
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
