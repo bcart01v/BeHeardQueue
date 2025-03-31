@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import { registerWithEmail } from "@/lib/auth";
 
 const RegisterPage = () => {
-  const [email, setEmail] = useState<string>(""); // Track email input
-  const [password, setPassword] = useState<string>(""); // Track password input
-  const [confirmPassword, setConfirmPassword] = useState<string>(""); // Track confirm password
+  const [email, setEmail] = useState<string>(""); 
+  const [password, setPassword] = useState<string>(""); 
+  const [confirmPassword, setConfirmPassword] = useState<string>(""); 
   const router = useRouter();
 
-  // Handle form submission
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
 
