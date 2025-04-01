@@ -503,8 +503,9 @@ export default function AdminPage() {
       });
     };
   }, []);
-
+  console.log('FIREBASE PROJECT ID:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
   return (
+    
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm">
