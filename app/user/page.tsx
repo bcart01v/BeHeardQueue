@@ -4,3 +4,11 @@
 // They should be able to see the avilable showers for that day and reserve a spot.
 // It should ask if they have laundry to go with the shower.
 // It should also ask if they want a haircut, pending availabliltiy. 
+
+export default function UserPage() {
+    return (
+      <div>
+        <h1>User Page</h1>
+      </div>
+    );
+  }
