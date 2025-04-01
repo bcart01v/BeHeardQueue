@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  User
+  User,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 
 // Sign up a new user
@@ -21,6 +22,10 @@ export const registerWithEmail = async (email: string, password: string): Promis
 
 // Sign in an existing user
 export const loginWithEmail = async (email: string, password: string): Promise<User | null> => {
+  if (auth.currentUser) {
+    console.log("User already logged in");
+    return auth.currentUser;
+  }
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return userCredential.user;
@@ -36,6 +41,17 @@ export const logout = async (): Promise<void> => {
     await signOut(auth);
   } catch (error) {
     console.error("Logout Error:", error);
+    throw error;
+  }
+};
+
+// Send password reset email
+export const resetPassword = async (email: string): Promise<void> => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    console.log("Password reset email sent");
+  } catch (error: any) {
+    console.error("Error sending password reset email:", error.message);
     throw error;
   }
 };
