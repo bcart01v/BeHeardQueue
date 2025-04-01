@@ -10,4 +10,5 @@ export type Trailer = {
   bufferTime: number;
   slotsPerBlock: number;
   stalls: string[]; // stall IDs
+  location: string; // geographical location of the trailer
 };
