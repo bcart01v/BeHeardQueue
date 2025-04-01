@@ -8,17 +8,28 @@ hosting:
     - node_modules
     - README.md
   rewrites:
-    - source: /_next/static/**/**, destination: /_next/static/**/**
-    - source: /_next/image/**/**, destination: /_next/image/**/**
-    - source: /_next/data/**/**, destination: /_next/data/**/**
-    - source: /_next/**/**, destination: /_next/**/**
-    - source: /static/**/**, destination: /static/**/**
-    - source: /favicon.ico, destination: /favicon.ico
-    - source: /manifest.json, destination: /manifest.json
-    - source: /robots.txt, destination: /robots.txt
-    - source: /sitemap.xml, destination: /sitemap.xml
-    - source: /api/**/**, destination: /api/**/**
-    - source: /**/**, destination: /index.html
+    - source: /_next/static/**/**
+      destination: /_next/static/**/**
+    - source: /_next/image/**/**
+      destination: /_next/image/**/**
+    - source: /_next/data/**/**
+      destination: /_next/data/**/**
+    - source: /_next/**/**
+      destination: /_next/**/**
+    - source: /static/**/**
+      destination: /static/**/**
+    - source: /favicon.ico
+      destination: /favicon.ico
+    - source: /manifest.json
+      destination: /manifest.json
+    - source: /robots.txt
+      destination: /robots.txt
+    - source: /sitemap.xml
+      destination: /sitemap.xml
+    - source: /api/**/**
+      destination: /api/**/**
+    - source: /**/**
+      destination: /index.html
 
 env:
   - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -70,4 +81,4 @@ env:
     value: ${GOOGLE_OAUTH_CLIENT_ID}
     availability:
       - BUILD
-      - RUNTIME 
+      - RUNTIME
