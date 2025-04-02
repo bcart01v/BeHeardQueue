@@ -23,12 +23,12 @@ jobs:
             ${{ runner.os }}-node-
       - name: Install Dependencies
         run: npm ci
-      - name: Debug Environment Variables
+      - name: Debug Secrets
         run: |
-          echo "Checking environment variables:"
-          echo "NEXT_PUBLIC_FIREBASE_API_KEY exists: ${{ env.NEXT_PUBLIC_FIREBASE_API_KEY != '' }}"
-          echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN exists: ${{ env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN != '' }}"
-          echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID exists: ${{ env.NEXT_PUBLIC_FIREBASE_PROJECT_ID != '' }}"
+          echo "Checking secrets:"
+          echo "NEXT_PUBLIC_FIREBASE_API_KEY exists: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY != '' }}"
+          echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN exists: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN != '' }}"
+          echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID exists: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID != '' }}"
       - name: Build
         run: npm run build
         env:
