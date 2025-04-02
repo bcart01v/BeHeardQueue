@@ -17,63 +17,53 @@ env:
       - BUILD
       - RUNTIME
 
-  # Firebase configuration variables
+  # Firebase configuration variables (Using value: for client-side embedding)
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    secret: NEXT_PUBLIC_FIREBASE_API_KEY_SECRET
+    value: "AIzaSyBT_MX9X4dB9S66ljB8J7uw2T_H4C9UvUk"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    secret: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN_SECRET
+    value: "beheardqueue.firebaseapp.com"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    secret: NEXT_PUBLIC_FIREBASE_PROJECT_ID_SECRET
+    value: "beheardqueue"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    secret: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET_SECRET
+    value: "beheardqueue.firebasestorage.app"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    secret: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID_SECRET
+    value: "51101708802"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    secret: NEXT_PUBLIC_FIREBASE_APP_ID_SECRET
+    value: "1:51101708802:web:70feb88e6551a449c1ed1b"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-    secret: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID_SECRET
+    value: "G-6R3GZRKTWZ"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_VAPID_KEY
-    secret: NEXT_PUBLIC_FIREBASE_MESSAGING_VAPID_KEY_SECRET
+    value: "BN25XvIWxNv0Yv0C19twPg_4bwA5vSmg-XVsRgyV8k9LYaGmiZZ5FQGyuQd_om5jOZIXe5kR11athQeRTsfDGQE"
     availability:
       - BUILD
-      - RUNTIME
 
-  - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    secret: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY_SECRET
+  - variable: NEXT_PUBLIC_Maps_API_KEY
+    value: "AIzaSyDV7JyOebjo1nMv47lxhqStkXju2uqDHgc"
     availability:
       - BUILD
-      - RUNTIME
 
   - variable: NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
-    secret: NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_SECRET
+    value: "51101708802-g92uk1ui3bn2do46flf6jqte07n7089t.apps.googleusercontent.com"
     availability:
       - BUILD
-      - RUNTIME
