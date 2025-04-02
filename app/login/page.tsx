@@ -2,6 +2,8 @@
 // Client side rendering
 
 "use client";
+export const dynamic = 'force-dynamic';
+
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithEmail } from "@/lib/auth";
