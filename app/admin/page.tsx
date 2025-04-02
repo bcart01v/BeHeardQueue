@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 // We can use Client for this page, it's not data intensive.
 
 import { useState, useEffect, useRef } from 'react';
