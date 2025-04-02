@@ -4,6 +4,15 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging';
 
+// Debug logging
+if (typeof window !== 'undefined') {
+  console.log('Firebase Config:', {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  });
+}
+
 // Get Firebase config from environment or use default config
 const getFirebaseConfig = () => {
   // Check if we're in a server-side environment (including GitHub Actions)
