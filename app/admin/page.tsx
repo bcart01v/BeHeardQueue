@@ -1,9 +1,7 @@
 'use client';
 // We can use Client for this page, it's not data intensive.
 
-
 import { useState, useEffect, useRef } from 'react';
-import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, where } from 'firebase/firestore';
 import { CompanySettings } from '@/types/company';
 import { Trailer } from '@/types/trailer';
@@ -17,6 +15,7 @@ import {
   QueueListIcon,
   UsersIcon
 } from '@heroicons/react/24/outline';
+import { db } from '@/lib/firebase';
 
 interface User {
   id: string;
@@ -29,6 +28,7 @@ interface User {
 }
 
 export default function AdminPage() {
+  const [isLoading, setIsLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
     name: '',
     openTime: '',
@@ -85,10 +85,22 @@ export default function AdminPage() {
 
   // Fetch initial data
   useEffect(() => {
-    fetchCompanySettings();
-    fetchTrailers();
-    fetchStalls();
-    fetchUsers();
+    const initializeData = async () => {
+      try {
+        await Promise.all([
+          fetchCompanySettings(),
+          fetchTrailers(),
+          fetchStalls(),
+          fetchUsers()
+        ]);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
   }, []);
 
   const fetchCompanySettings = async () => {
@@ -504,6 +516,15 @@ export default function AdminPage() {
     };
   }, []);
   console.log('FIREBASE PROJECT ID:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     
     <div className="flex flex-col min-h-screen bg-gray-50">
