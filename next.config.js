@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   env: {
     NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +12,11 @@ const nextConfig = {
     NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
   },
   output: 'standalone',
-}
+  webpack: (config) => {
+    // Set up the alias for '@'
+    config.resolve.alias['@'] = path.resolve(__dirname);
+    return config;
+  },
+};
 
-module.exports = nextConfig 
+module.exports = nextConfig;
