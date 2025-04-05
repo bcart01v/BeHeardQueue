@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               firstName: userData.firstName || '',
               lastName: userData.lastName || '',
               role: userData.role || 'user',
-              companyIds: userData.companyIds || [],
+              companyId: userData.companyId || '',
               createdAt: userData.createdAt?.toDate() || new Date(),
               updatedAt: userData.updatedAt?.toDate() || new Date(),
               displayName: userData.displayName || firebaseUser.displayName || undefined,
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               firstName: '',
               lastName: '',
               role: 'user',
-              companyIds: [],
+              companyId: '',
               createdAt: new Date(),
               updatedAt: new Date(),
               displayName: firebaseUser.displayName || undefined
