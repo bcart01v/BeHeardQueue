@@ -1,14 +1,14 @@
-export type ServiceType = "laundry" | "shower" | "haircut";
-
-export type Trailer = {
-  id?: string;
-  name: string; // could also be license plate
-  serviceType: ServiceType;
+export interface Trailer {
+  id: string;
+  name: string;
+  companyId: string; // The company the trailer belongs to
   startTime: string;
   endTime: string;
   duration: number;
   bufferTime: number;
   slotsPerBlock: number;
-  stalls: string[]; // stall IDs
-  location: string; // geographical location of the trailer
-};
+  stalls: string[]; // Array of stall IDs
+  location: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
