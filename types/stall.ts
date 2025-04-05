@@ -1,8 +1,13 @@
-export type StallStatus = "in_use" | "out_of_order" | "refreshing" | "available";
+export type StallStatus = 'available' | 'in_use' | 'refreshing' | 'out_of_order';
+export type ServiceType = 'shower' | 'laundry' | 'haircut';
 
-export type Stall = {
-  id?: string;
+export interface Stall {
+  id: string;
   name: string;
+  companyId: string; // The company the stall belongs to
+  trailerGroup: string; // The trailer ID this stall belongs to
   status: StallStatus;
-  trailerGroup: string; // id/name of associated trailer group
-};
+  serviceType: ServiceType;
+  createdAt: Date;
+  updatedAt: Date;
+}

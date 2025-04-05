@@ -1,5 +1,5 @@
 // lib/auth.ts
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -8,12 +8,38 @@ import {
   User,
   sendPasswordResetEmail
 } from 'firebase/auth';
+import { doc, setDoc, Timestamp, collection, addDoc } from 'firebase/firestore';
 
 // Sign up a new user
 export const registerWithEmail = async (email: string, password: string): Promise<User | null> => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    const user = userCredential.user;
+
+    // Create a default company for the user
+    const companyData = {
+      name: `${email.split('@')[0]}'s Company`,
+      description: 'Default company',
+      ownerId: user.uid,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+
+    const companyRef = await addDoc(collection(db, 'companies'), companyData);
+    const companyId = companyRef.id;
+
+    // Create a user document in Firestore
+    await setDoc(doc(db, 'users', user.uid), {
+      id: user.uid,
+      email: user.email,
+      role: 'client', // Default role
+      currentCompanyId: companyId,
+      companyIds: [companyId],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+
+    return user;
   } catch (error) {
     console.error("Registration Error:", error);
     throw error;

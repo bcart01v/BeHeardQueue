@@ -1,19 +1,22 @@
-import type { ServiceType } from "./trailer";
+import { Stall } from './stall';
+import { Trailer } from './trailer';
+import { User } from './user';
 
-export type TimeBlock =
-  | "early_morning"
-  | "late_morning"
-  | "early_afternoon"
-  | "late_afternoon";
-
-export type Appointment = {
-  id: string; // Firestore generated
-  serviceType: ServiceType;
+export interface Appointment {
+  id: string;
   userId: string;
-  date: string; // YYYY--MM--DD format
-  location: string;
-  timeBlock: TimeBlock;
-  appointmentTime?: string; // exact appointment time, optional until user checks in and is assigned a time by admin
-  assignedUnit?: string; // assigned by admin on check-in
-  checkedIn: boolean;
-};
+  stallId: string;
+  trailerId: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AppointmentWithDetails extends Appointment {
+  user: User;
+  stall: Stall;
+  trailer: Trailer;
+}
