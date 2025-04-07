@@ -41,24 +41,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               companyId: userData.companyId || '',
               createdAt: userData.createdAt?.toDate() || new Date(),
               updatedAt: userData.updatedAt?.toDate() || new Date(),
-              displayName: userData.displayName || firebaseUser.displayName || undefined,
-              currentCompanyId: userData.currentCompanyId
+              displayName: userData.displayName || firebaseUser.displayName || undefined
             };
             
             setUser(user);
           } else {
             // If no Firestore document exists, create a basic user object
-            setUser({
+            const userData = {
               id: firebaseUser.uid,
               email: firebaseUser.email || '',
-              firstName: '',
-              lastName: '',
+              firstName: firebaseUser.displayName?.split(' ')[0] || '',
+              lastName: firebaseUser.displayName?.split(' ')[1] || '',
               role: 'user',
               companyId: '',
               createdAt: new Date(),
-              updatedAt: new Date(),
-              displayName: firebaseUser.displayName || undefined
-            });
+              updatedAt: new Date()
+            };
+            
+            setUser(userData as User);
           }
         } else {
           setUser(null);

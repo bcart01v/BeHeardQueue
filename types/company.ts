@@ -18,6 +18,7 @@ export interface Company {
   availableServices: {
     shower: boolean;
     laundry: boolean;
+    haircut: boolean;
   };
   createdAt: Date;
   updatedAt: Date;

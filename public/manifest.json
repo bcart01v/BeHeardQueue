@@ -1,0 +1,16 @@
+{
+  "name": "BeHeard Queue",
+  "short_name": "BeHeard",
+  "description": "The appointment scheduling system for mobile service providers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e1b1b",
+  "theme_color": "#ffa300",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+} 

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -23,7 +23,7 @@ function HomeContent() {
         setLoading(false);
         return;
       }
-      
+
       try {
         const companyDoc = await getDoc(doc(db, 'companies', companyId));
         
@@ -45,9 +45,9 @@ function HomeContent() {
 
   const handleSignup = () => {
     if (companyId) {
-      router.push(`/signup?companyId=${companyId}`);
+      router.push(`/register?companyId=${companyId}`);
     } else {
-      router.push('/signup');
+      router.push('/register');
     }
   };
 
@@ -62,94 +62,74 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-black">BeHeard Queue</h1>
-            <div className="flex space-x-4">
-              <Link 
-                href="/login" 
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors duration-200"
-              >
-                Log in
-              </Link>
+    <div className="min-h-screen bg-[#1e1b1b] flex flex-col items-center">
+      <div className="flex justify-center mt-32 mb-8">
+        <img src="/BeHeardLogo.svg" alt="BeHeard Logo" className="h-32" />
+      </div>
+
+      {error ? (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 w-full max-w-7xl mx-4">
+          {error}
+        </div>
+      ) : null}
+
+      {company ? (
+        <div className="bg-[#ffa300] shadow overflow-hidden sm:rounded-lg w-full max-w-7xl mx-4">
+          <div className="px-4 py-5 sm:px-6">
+            <h2 className="text-lg leading-6 font-medium text-[#3e2802]">
+              Welcome to {company.name}
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-[#3e2802]">
+              {company.description}
+            </p>
+          </div>
+          <div className="border-t border-[#3e2802] px-4 py-5 sm:px-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <h3 className="text-lg font-medium text-[#3e2802]">Operating Hours</h3>
+                <p className="mt-1 text-sm text-[#3e2802]">
+                  {company.openTime} - {company.closeTime}
+                </p>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-[#3e2802]">Booking Policy</h3>
+                <p className="mt-1 text-sm text-[#3e2802]">
+                  {company.maxBookingDays 
+                    ? `You can book appointments up to ${company.maxBookingDays} days in advance.`
+                    : 'Booking policy information not available.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6">
               <button
                 onClick={handleSignup}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                className="w-full bg-[#3e2802] text-[#ffa300] px-4 py-2 rounded-md hover:bg-[#2a1c01] transition-colors duration-200"
               >
-                Sign up
+                Register for {company.name}
               </button>
             </div>
           </div>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        {error ? (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        ) : null}
-
-        {company ? (
-          <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-            <div className="px-4 py-5 sm:px-6">
-              <h2 className="text-lg leading-6 font-medium text-black">
-                Welcome to {company.name}
-              </h2>
-              <p className="mt-1 max-w-2xl text-sm text-black">
-                {company.description}
-              </p>
-            </div>
-            <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div>
-                  <h3 className="text-lg font-medium text-black">Operating Hours</h3>
-                  <p className="mt-1 text-sm text-black">
-                    {company.openTime} - {company.closeTime}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-black">Booking Policy</h3>
-                  <p className="mt-1 text-sm text-black">
-                    {company.maxBookingDays 
-                      ? `You can book appointments up to ${company.maxBookingDays} days in advance.`
-                      : 'Booking policy information not available.'}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <button
-                  onClick={handleSignup}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                >
-                  Sign up for {company.name}
-                </button>
-              </div>
+      ) : (
+        <div className="text-center">
+          <h2 className="text-3xl font-extrabold text-[#ffffff] sm:text-4xl">
+            Welcome to BeHeard Queue
+          </h2>
+          <p className="mt-3 max-w-2xl mx-auto text-xl text-[#ffffff] sm:mt-4">
+            The appointment scheduling system for the BeHeard Organization.
+          </p>
+          <div className="mt-8 flex justify-center">
+            <div className="inline-flex rounded-md shadow">
+              <button
+                onClick={handleSignup}
+                className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-[#ffa300] bg-[#3e2802] hover:bg-[#2a1c01] transition-colors duration-200"
+              >
+                Get started
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="text-center">
-            <h2 className="text-3xl font-extrabold text-black sm:text-4xl">
-              Welcome to BeHeard Queue
-            </h2>
-            <p className="mt-3 max-w-2xl mx-auto text-xl text-black sm:mt-4">
-              The appointment scheduling system for mobile service providers.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <div className="inline-flex rounded-md shadow">
-                <button
-                  onClick={handleSignup}
-                  className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                >
-                  Get started
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }
@@ -170,7 +150,7 @@ function HomeContentFallback() {
                 Log in
               </Link>
               <div className="bg-blue-600 text-white px-4 py-2 rounded-md">
-                Sign up
+                Register
               </div>
             </div>
           </div>
@@ -187,7 +167,8 @@ function HomeContentFallback() {
     </div>
   );
 }
-export default function HomePage() {
+
+export default function HomeClient() {
   return (
     <Suspense fallback={<HomeContentFallback />}>
       <HomeContent />

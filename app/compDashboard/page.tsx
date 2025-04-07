@@ -16,13 +16,13 @@ export default function CompanyDashboardPage() {
 
   useEffect(() => {
     const fetchCompanyData = async () => {
-      if (!user || !user.currentCompanyId) {
+      if (!user || !user.companyId) {
         setIsLoading(false);
         return;
       }
       
       try {
-        const companyDoc = await getDoc(doc(db, 'companies', user.currentCompanyId));
+        const companyDoc = await getDoc(doc(db, 'companies', user.companyId));
         
         if (companyDoc.exists()) {
           setCompany({ id: companyDoc.id, ...companyDoc.data() } as Company);
@@ -68,25 +68,17 @@ export default function CompanyDashboardPage() {
     );
   }
 
+  if (!user || !user.companyId) {
+    return (
+      <div className="min-h-screen bg-[#1e1b1b] flex items-center justify-center">
+        <div className="text-[#ffa300]">No company selected</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-black">Company Dashboard</h1>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => router.push('/userDashboard')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                User Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 mt-16">
         {company ? (
           <div className="bg-white shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">

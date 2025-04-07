@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Appointment, AppointmentWithDetails } from '@/types/appointment';
 import { Company } from '@/types/company';
@@ -11,8 +11,185 @@ import { User } from '@/types/user';
 import { format, addDays, isAfter, isBefore, parseISO, addMinutes, isToday, isFuture, startOfDay } from 'date-fns';
 import { useAuth } from '@/app/components/AuthContext';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'firebase/auth';
+import { signOut, updateEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { toast } from 'react-hot-toast';
+import { HaircutAvailability } from '@/types/haircutAvailability';
+
+// Profile Edit Modal Component
+function ProfileEditModal({ 
+  isOpen, 
+  onClose, 
+  user, 
+  onUpdate 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  user: User | null; 
+  onUpdate: (updatedUser: Partial<User>) => Promise<void>;
+}) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Initialize form with user data when modal opens
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
+      setEmail(user.email || '');
+      setPhone(user.phone || '');
+    }
+  }, [user]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+
+    try {
+      // Validate form
+      if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+        throw new Error('First name, last name, and email are required');
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Update user profile
+      await onUpdate({
+        firstName,
+        lastName,
+        email,
+        phone,
+        updatedAt: new Date()
+      });
+
+      setSuccess('Profile updated successfully!');
+      
+      // Keep the success message visible for 2 seconds before closing
+      setTimeout(() => {
+        setSuccess(null);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while updating your profile');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-[#1e1b1b] rounded-lg shadow-xl p-6 max-w-md w-full">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-[#ffa300]">Edit Profile</h2>
+          <button 
+            onClick={onClose}
+            className="text-[#ffa300] hover:text-[#ffb733]"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-900 text-red-200 rounded-md">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 p-3 bg-green-900 text-green-200 rounded-md">
+            {success}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+              First Name *
+            </label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+              Last Name *
+            </label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+              Email *
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+              placeholder="(123) 456-7890"
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-[#ffa300] rounded-md text-[#ffa300] hover:bg-[#ffa300] hover:text-[#3e2802]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 bg-[#ffa300] text-[#3e2802] rounded-md hover:bg-[#ffb733] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 // Booking Form Component
 function BookingForm({ 
@@ -24,22 +201,31 @@ function BookingForm({
   selectedServiceType, 
   setSelectedServiceType,
   userCompany,
-  isLoading
+  isLoading,
+  userLocation
 }: { 
   onClose: () => void; 
   onSubmit: (appointment: Partial<Appointment>) => void; 
-  availableTimeSlots: string[]; 
+  availableTimeSlots: { time: string; stallId: string; trailerId: string; duration: number; bufferTime: number }[]; 
   selectedDate: Date | null; 
   setSelectedDate: (date: Date | null) => void; 
   selectedServiceType: ServiceType | null; 
   setSelectedServiceType: (type: ServiceType | null) => void;
   userCompany: Company | null;
   isLoading: boolean;
+  userLocation: { lat: number; lng: number } | null;
 }) {
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<{
+    time: string;
+    stallId: string;
+    trailerId: string;
+    duration: number;
+    bufferTime: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [availableStalls, setAvailableStalls] = useState<Stall[]>([]);
   const [availableTrailers, setAvailableTrailers] = useState<Trailer[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
 
   // Calculate min and max dates based on company settings
   const minDate = new Date();
@@ -60,24 +246,34 @@ function BookingForm({
       try {
         const stallsQuery = query(
           collection(db, 'stalls'),
-          where('serviceType', '==', selectedServiceType),
-          where('status', '==', 'available')
+          where('serviceType', '==', selectedServiceType)
         );
         const stallsDoc = await getDocs(stallsQuery);
         const stalls = stallsDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as Stall));
         setAvailableStalls(stalls);
 
+        if (stalls.length === 0) {
+          console.log('No stalls found for service type:', selectedServiceType);
+          setAvailableTrailers([]);
+          return;
+        }
+
         // Get unique trailer IDs from stalls
         const trailerIds = [...new Set(stalls.map(stall => stall.trailerGroup))];
         
-        // Fetch trailers
-        const trailersQuery = query(
-          collection(db, 'trailers'),
-          where('id', 'in', trailerIds)
-        );
-        const trailersDoc = await getDocs(trailersQuery);
-        const trailers = trailersDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trailer));
-        setAvailableTrailers(trailers);
+        // Only fetch trailers if we have stall IDs
+        if (trailerIds.length > 0) {
+          // Fetch trailers
+          const trailersQuery = query(
+            collection(db, 'trailers'),
+            where('id', 'in', trailerIds)
+          );
+          const trailersDoc = await getDocs(trailersQuery);
+          const trailers = trailersDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trailer));
+          setAvailableTrailers(trailers);
+        } else {
+          setAvailableTrailers([]);
+        }
       } catch (error) {
         console.error('Error fetching available stalls and trailers:', error);
         setError('Failed to load available services. Please try again.');
@@ -87,6 +283,156 @@ function BookingForm({
     fetchAvailableStalls();
   }, [selectedServiceType]);
 
+  // Validate time slot selection when it changes
+  useEffect(() => {
+    if (selectedTimeSlot) {
+      validateTimeSlot(selectedTimeSlot);
+    }
+  }, [selectedTimeSlot]);
+
+  const validateTimeSlot = async (slot: {
+    time: string;
+    stallId: string;
+    trailerId: string;
+    duration: number;
+    bufferTime: number;
+  }) => {
+    setIsValidating(true);
+    setError(null);
+    
+    try {
+      console.log('Validating time slot:', slot);
+      
+      // Check if the stall exists
+      const stallDoc = await getDoc(doc(db, 'stalls', slot.stallId));
+      if (!stallDoc.exists()) {
+        console.log('Stall not found:', slot.stallId);
+        setError('Selected stall not found');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      const stall = stallDoc.data() as Stall;
+      console.log('Stall data:', stall);
+      
+      // Only check stall status for same-day bookings
+      const today = new Date();
+      const isSameDay = selectedDate && 
+        today.getFullYear() === selectedDate.getFullYear() &&
+        today.getMonth() === selectedDate.getMonth() &&
+        today.getDate() === selectedDate.getDate();
+      
+      if (isSameDay && stall.status !== 'available') {
+        console.log('Stall status is not available for same-day booking:', stall.status);
+        setError('Selected stall is not available');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      if (stall.serviceType !== selectedServiceType) {
+        console.log('Stall service type mismatch:', stall.serviceType, 'vs', selectedServiceType);
+        setError('Selected stall does not provide the requested service type');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      // Check if the trailer exists
+      const trailerDoc = await getDoc(doc(db, 'trailers', slot.trailerId));
+      if (!trailerDoc.exists()) {
+        console.log('Trailer not found:', slot.trailerId);
+        setError('Selected trailer not found');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      const trailer = trailerDoc.data() as Trailer;
+      console.log('Trailer data:', trailer);
+      
+      // Check if the stall belongs to the trailer
+      console.log('Stall trailer group:', stall.trailerGroup, 'vs selected trailer ID:', slot.trailerId);
+      if (stall.trailerGroup !== slot.trailerId) {
+        console.log('Stall does not belong to the selected trailer');
+        setError('Selected stall does not belong to the selected trailer');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      // Check if the time slot is within the trailer's operating hours
+      const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
+      const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
+      
+      const trailerStartTime = new Date(selectedDate as Date);
+      trailerStartTime.setHours(startHour, startMinute, 0, 0);
+      
+      const trailerEndTime = new Date(selectedDate as Date);
+      trailerEndTime.setHours(endHour, endMinute, 0, 0);
+      
+      const appointmentStartTime = new Date(selectedDate as Date);
+      // Parse time in 12-hour format with AM/PM
+      const timeParts = slot.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (!timeParts) {
+        console.log('Invalid time format:', slot.time);
+        setError('Invalid time format');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      let [_, hours, minutes, period] = timeParts;
+      let hour = parseInt(hours);
+      const minute = parseInt(minutes);
+      
+      // Convert to 24-hour format
+      if (period.toUpperCase() === 'PM' && hour < 12) {
+        hour += 12;
+      } else if (period.toUpperCase() === 'AM' && hour === 12) {
+        hour = 0;
+      }
+      
+      console.log('Parsed time:', { hour, minute, period, original: slot.time });
+      appointmentStartTime.setHours(hour, minute, 0, 0);
+      
+      console.log('Time comparison:', {
+        appointmentStartTime: appointmentStartTime.toLocaleTimeString(),
+        trailerStartTime: trailerStartTime.toLocaleTimeString(),
+        trailerEndTime: trailerEndTime.toLocaleTimeString(),
+        isBeforeStart: appointmentStartTime < trailerStartTime,
+        isAfterEnd: appointmentStartTime > trailerEndTime
+      });
+      
+      if (appointmentStartTime < trailerStartTime || appointmentStartTime > trailerEndTime) {
+        console.log('Time slot is outside the trailer\'s operating hours');
+        setError('Selected time slot is outside the trailer\'s operating hours');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      // Check if the time slot is already booked
+      const appointmentsQuery = query(
+        collection(db, 'appointments'),
+        where('date', '==', Timestamp.fromDate(selectedDate as Date)),
+        where('stallId', '==', slot.stallId),
+        where('startTime', '==', slot.time),
+        where('status', '==', 'scheduled')
+      );
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
+      
+      if (!appointmentsSnapshot.empty) {
+        setError('Selected time slot is already booked');
+        setSelectedTimeSlot(null);
+        return;
+      }
+      
+      // If we get here, the time slot is valid
+      console.log('Time slot is valid:', slot);
+    } catch (error) {
+      console.error('Error validating time slot:', error);
+      setError('An error occurred while validating the time slot');
+      setSelectedTimeSlot(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -95,27 +441,13 @@ function BookingForm({
       return;
     }
 
-    // Auto-assign a stall and trailer
-    if (availableStalls.length === 0 || availableTrailers.length === 0) {
-      setError('No available stalls or trailers for this service type');
-      return;
-    }
-
-    // Find the first available stall
-    const selectedStall = availableStalls[0];
-    const selectedTrailer = availableTrailers.find(t => t.id === selectedStall.trailerGroup);
-
-    if (!selectedTrailer) {
-      setError('Could not find a matching trailer for the selected stall');
-      return;
-    }
-
     // Create appointment object
     const appointment: Partial<Appointment> = {
       date: selectedDate,
-      startTime: selectedTimeSlot,
-      stallId: selectedStall.id,
-      trailerId: selectedTrailer.id,
+      startTime: selectedTimeSlot.time,
+      endTime: addMinutesToTime(selectedTimeSlot.time, selectedTimeSlot.duration),
+      stallId: selectedTimeSlot.stallId,
+      trailerId: selectedTimeSlot.trailerId,
       status: 'scheduled',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -125,13 +457,13 @@ function BookingForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-[#1e1b1b] bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-[#ffa300] rounded-lg shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-black">Book an Appointment</h2>
+          <h2 className="text-xl font-bold text-[#3e2802]">Book an Appointment</h2>
           <button 
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-[#3e2802] hover:text-[#2a1c01]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -147,46 +479,83 @@ function BookingForm({
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-black mb-1">
+            <label className="block text-sm font-medium text-[#3e2802] mb-2">
               Service Type *
             </label>
-            <select
-              value={selectedServiceType || ''}
-              onChange={(e) => setSelectedServiceType(e.target.value as ServiceType)}
-              className="w-full p-2 border border-gray-300 rounded-md text-black"
-              required
-            >
-              <option value="">Select a service</option>
-              <option value="shower">Shower</option>
-              <option value="laundry">Laundry</option>
-              <option value="haircut">Haircut</option>
-            </select>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedServiceType('shower')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedServiceType === 'shower'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Shower
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedServiceType('laundry')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedServiceType === 'laundry'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Laundry
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedServiceType('haircut')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedServiceType === 'haircut'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Haircut
+              </button>
+            </div>
+            {!selectedServiceType && (
+              <p className="mt-2 text-sm text-red-600">Please select a service type</p>
+            )}
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-black mb-1">
+            <label className="block text-sm font-medium text-[#3e2802] mb-1">
               Date *
             </label>
-            <input
-              type="date"
-              min={format(minDate, 'yyyy-MM-dd')}
-              max={format(maxDate, 'yyyy-MM-dd')}
-              value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}
-              onChange={(e) => {
-                if (e.target.value) {
-                  // Parse the date string directly to avoid timezone issues
-                  const [year, month, day] = e.target.value.split('-').map(Number);
-                  const date = new Date(year, month - 1, day);
-                  setSelectedDate(date);
-                } else {
-                  setSelectedDate(null);
-                }
-              }}
-              className="w-full p-2 border border-gray-300 rounded-md text-black"
-              required
-            />
+            <div className="flex space-x-2">
+              <input
+                type="date"
+                min={format(minDate, 'yyyy-MM-dd')}
+                max={format(maxDate, 'yyyy-MM-dd')}
+                value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    // Parse the date string directly to avoid timezone issues
+                    const [year, month, day] = e.target.value.split('-').map(Number);
+                    const date = new Date(year, month - 1, day);
+                    setSelectedDate(date);
+                  } else {
+                    setSelectedDate(null);
+                  }
+                }}
+                className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setSelectedDate(new Date())}
+                className="px-3 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] transition-colors"
+                title="Set to today"
+              >
+                Today
+              </button>
+            </div>
             {userCompany?.maxBookingDays && (
-              <p className="mt-1 text-xs text-black">
+              <p className="mt-1 text-xs text-[#3e2802]">
                 You can book up to {userCompany.maxBookingDays} days in advance
               </p>
             )}
@@ -194,33 +563,37 @@ function BookingForm({
 
           {selectedDate && selectedServiceType && availableTimeSlots.length > 0 && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-black mb-2">
+              <label className="block text-sm font-medium text-[#3e2802] mb-2">
                 Available Time Slots *
               </label>
               <div className="grid grid-cols-4 gap-2">
                 {availableTimeSlots.map((slot) => (
                   <button
-                    key={slot}
+                    key={`${slot.time}-${slot.stallId}`}
                     type="button"
                     onClick={() => setSelectedTimeSlot(slot)}
                     className={`p-2 text-sm rounded-md transition-colors ${
-                      selectedTimeSlot === slot
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-black hover:bg-gray-200'
+                      selectedTimeSlot?.time === slot.time && selectedTimeSlot?.stallId === slot.stallId
+                        ? 'bg-[#3e2802] text-[#ffa300]'
+                        : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
                     }`}
+                    disabled={isValidating}
                   >
-                    {slot}
+                    {slot.time}
                   </button>
                 ))}
               </div>
               {!selectedTimeSlot && (
                 <p className="mt-2 text-sm text-red-600">Please select a time slot</p>
               )}
+              {isValidating && (
+                <p className="mt-2 text-sm text-[#3e2802]">Validating time slot...</p>
+              )}
             </div>
           )}
 
           {selectedDate && selectedServiceType && availableTimeSlots.length === 0 && (
-            <div className="mb-4 p-3 bg-yellow-100 text-yellow-700 rounded-md">
+            <div className="mb-4 p-3 bg-[#3e2802] text-[#ffa300] rounded-md">
               No available time slots for the selected date and service type. Please try another date or service.
             </div>
           )}
@@ -229,14 +602,14 @@ function BookingForm({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-black hover:bg-gray-50"
+              className="px-4 py-2 border border-[#3e2802] rounded-md text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isLoading || !selectedDate || !selectedTimeSlot || !selectedServiceType}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || !selectedDate || !selectedTimeSlot || !selectedServiceType || isValidating}
+              className="px-4 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Booking...' : 'Book Appointment'}
             </button>
@@ -253,7 +626,13 @@ export default function UserDashboardPage() {
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<{
+    time: string;
+    stallId: string;
+    trailerId: string;
+    duration: number;
+    bufferTime: number;
+  }[]>([]);
   const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userCompany, setUserCompany] = useState<Company | null>(null);
@@ -264,7 +643,9 @@ export default function UserDashboardPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
-  const [isPageLoaded, setIsPageLoaded] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Get user's location when component mounts
   useEffect(() => {
@@ -278,7 +659,6 @@ export default function UserDashboardPage() {
           setLocationError(null);
         },
         (error) => {
-          console.error('Error getting location:', error);
           setLocationError('Unable to get your location. Some features may be limited.');
         }
       );
@@ -300,39 +680,30 @@ export default function UserDashboardPage() {
       if (!user?.id) return;
       
       try {
-        console.log('Fetching user data for ID:', user.id);
         const userDoc = await getDocs(query(collection(db, 'users'), where('id', '==', user.id)));
         if (userDoc.empty) {
-          console.error('No user found with ID:', user.id);
           return;
         }
         const userData = userDoc.docs[0].data() as User;
-        console.log('User data:', userData);
         setCurrentUser(userData);
 
         // Fetch user's company data if they have a company ID
         if (userData.companyId) {
-          console.log('Fetching company data for ID:', userData.companyId);
           const companyDoc = await getDocs(query(collection(db, 'companies'), where('id', '==', userData.companyId)));
           if (!companyDoc.empty) {
             const companyData = companyDoc.docs[0].data() as Company;
-            console.log('Company data:', companyData);
             setUserCompany(companyData);
 
             // Fetch company's trailers
-            console.log('Fetching trailers for company:', companyData.id);
             const trailersQuery = query(collection(db, 'trailers'), where('companyId', '==', companyData.id));
             const trailersSnapshot = await getDocs(trailersQuery);
             const trailers = trailersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trailer));
-            console.log('Trailers:', trailers);
             setCompanyTrailers(trailers);
 
             // Fetch company's stalls
-            console.log('Fetching stalls for company:', companyData.id);
             const stallsQuery = query(collection(db, 'stalls'), where('companyId', '==', companyData.id));
             const stallsSnapshot = await getDocs(stallsQuery);
             const stalls = stallsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Stall));
-            console.log('Stalls:', stalls);
             setCompanyStalls(stalls);
 
             // Fetch user's appointments with stall and trailer data
@@ -369,18 +740,12 @@ export default function UserDashboardPage() {
             }));
 
             setAppointments(appointmentsData);
-          } else {
-            console.error('No company found with ID:', userData.companyId);
           }
-        } else {
-          console.error('User has no company ID');
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        setError('Failed to fetch user data');
       } finally {
         setIsLoading(false);
-        // Add a small delay before showing the page to allow for animations
-        setTimeout(() => setIsPageLoaded(true), 300);
       }
     };
 
@@ -389,84 +754,40 @@ export default function UserDashboardPage() {
     }
   }, [user, authLoading]);
 
-  // Calculate available time slots when date and service type are selected
+  // Calculate available time slots when date or service type changes
   useEffect(() => {
     if (!selectedDate || !selectedServiceType || !userCompany) return;
 
     const calculateAvailableSlots = async () => {
-      console.log('Calculating available slots for:', {
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        serviceType: selectedServiceType,
-        companyId: userCompany.id
-      });
+      const availableSlots: {
+        time: string;
+        stallId: string;
+        trailerId: string;
+        duration: number;
+        bufferTime: number;
+      }[] = [];
 
-      const availableSlots: string[] = [];
       const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-      
-      // Get day of week (0 = Sunday, 1 = Monday, etc.)
-      const dayIndex = selectedDate.getDay();
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const dayOfWeek = days[dayIndex];
 
-      console.log('Day of week:', dayOfWeek);
-      console.log('Company open days:', userCompany.openDays);
+      // Get all available stalls for the selected service type
+      const availableStalls = companyStalls.filter(stall => 
+        stall.serviceType === selectedServiceType
+      );
 
-      // Check if the selected day is an open day for the company
-      if (!userCompany.openDays[dayOfWeek as keyof typeof userCompany.openDays]) {
-        console.log('Selected day is not an open day');
-        setAvailableTimeSlots([]);
-        return;
-      }
-
-      // Get all stalls of the selected service type
-      const availableStalls = companyStalls.filter(stall => {
-        console.log('Checking stall:', stall.id, {
-          serviceType: stall.serviceType,
-          selectedServiceType,
-          trailerGroup: stall.trailerGroup
-        });
-        return stall.serviceType === selectedServiceType; // Only filter by service type, ignore status
-      });
-
-      console.log('Available stalls:', availableStalls);
-
-      // Get all trailers that have these stalls
-      const relevantTrailers = companyTrailers.filter(trailer => {
-        const hasMatchingStall = availableStalls.some(stall => stall.trailerGroup === trailer.id);
-        console.log('Checking trailer:', trailer.id, {
-          hasMatchingStall,
-          stallGroups: availableStalls.map(s => s.trailerGroup)
-        });
-        return hasMatchingStall;
-      });
-
-      console.log('Relevant trailers:', relevantTrailers);
-
-      if (relevantTrailers.length === 0) {
-        console.log('No relevant trailers found');
-        setAvailableTimeSlots([]);
-        return;
-      }
-
-      // Sort trailers by distance if location is available
-      let sortedTrailers = [...relevantTrailers];
+      // Sort trailers by distance if user location is available
+      let sortedTrailers = [...companyTrailers];
       if (userLocation) {
         sortedTrailers.sort((a, b) => {
-          const distanceA = calculateDistance(userLocation, a.location);
-          const distanceB = calculateDistance(userLocation, b.location);
+          const [aLat, aLng] = a.location.split(',').map(Number);
+          const [bLat, bLng] = b.location.split(',').map(Number);
+          const distanceA = calculateDistance(userLocation.lat + ',' + userLocation.lng, a.location);
+          const distanceB = calculateDistance(userLocation.lat + ',' + userLocation.lng, b.location);
           return distanceA - distanceB;
         });
       }
 
       // Calculate time slots for each trailer
       for (const trailer of sortedTrailers) {
-        console.log('Processing trailer:', trailer.id, {
-          startTime: trailer.startTime,
-          endTime: trailer.endTime,
-          duration: trailer.duration,
-          bufferTime: trailer.bufferTime
-        });
-
         // Parse start and end times
         const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
         const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
@@ -478,164 +799,192 @@ export default function UserDashboardPage() {
         const endTime = new Date(selectedDate);
         endTime.setHours(endHour, endMinute, 0, 0);
 
-        const duration = trailer.duration || 30; // Default to 30 minutes if not set
-        const bufferTime = trailer.bufferTime || 15; // Default to 15 minutes if not set
-        const totalSlotDuration = duration + bufferTime;
+        // Get stalls for this trailer
+        const trailerStalls = availableStalls.filter(stall => stall.trailerGroup === trailer.id);
+        
+        if (trailerStalls.length === 0) {
+          continue;
+        }
+        
+        // Calculate time slots based on stall settings
+        for (const stall of trailerStalls) {
+          const duration = stall.duration || 30; // Default to 30 minutes if not set
+          const bufferTime = stall.bufferTime || 15; // Default to 15 minutes if not set
+          const totalSlotDuration = duration + bufferTime;
 
-        let currentTime = startTime;
-        while (currentTime < endTime) {
-          // Format time in 12-hour format with AM/PM
-          const timeSlot = format(currentTime, 'h:mm a');
-          
-          // Check if this time slot is already booked
-          const isBooked = appointments.some(appointment => 
-            format(appointment.date, 'yyyy-MM-dd') === selectedDateStr &&
-            appointment.startTime === timeSlot
-          );
+          let currentTime = startTime;
+          while (currentTime < endTime) {
+            // Format time in 12-hour format with AM/PM
+            const timeSlot = format(currentTime, 'h:mm a');
+            
+            // Check if this time slot is already booked for this specific stall
+            const isBooked = appointments.length > 0 && appointments.some(appointment => {
+              const appointmentDate = format(appointment.date, 'yyyy-MM-dd');
+              const matches = appointmentDate === selectedDateStr &&
+                appointment.startTime === timeSlot &&
+                appointment.stallId === stall.id;
+              
+              return matches;
+            });
 
-          if (!isBooked) {
-            availableSlots.push(timeSlot);
+            if (!isBooked) {
+              // Add the time slot with stall and trailer information
+              availableSlots.push({
+                time: timeSlot,
+                stallId: stall.id,
+                trailerId: trailer.id,
+                duration: duration,
+                bufferTime: bufferTime
+              });
+            }
+
+            // Move to next time slot
+            currentTime = new Date(currentTime.getTime() + totalSlotDuration * 60000);
           }
-
-          // Move to next time slot
-          currentTime = new Date(currentTime.getTime() + totalSlotDuration * 60000);
         }
       }
 
-      console.log('Available slots before deduplication:', availableSlots);
-      // Remove duplicates and sort
-      const uniqueSlots = [...new Set(availableSlots)].sort((a, b) => {
-        // Custom sort function to handle 12-hour time format
-        const timeA = new Date(`1970-01-01 ${a}`);
-        const timeB = new Date(`1970-01-01 ${b}`);
-        return timeA.getTime() - timeB.getTime();
-      });
-      console.log('Final available slots:', uniqueSlots);
+      // Remove duplicate time slots
+      const uniqueSlots = availableSlots.filter((slot, index, self) =>
+        index === self.findIndex((s) => s.time === slot.time)
+      );
+
       setAvailableTimeSlots(uniqueSlots);
+      
+      // Show booking form if there are available slots
+      if (uniqueSlots.length > 0) {
+        setShowBookingForm(true);
+      }
     };
 
     calculateAvailableSlots();
-  }, [selectedDate, selectedServiceType, companyStalls, companyTrailers, appointments, userCompany, userLocation]);
+  }, [selectedDate, selectedServiceType, userCompany, companyStalls, companyTrailers, appointments, userLocation]);
 
-  const handleBookAppointment = async (appointment: Partial<Appointment>) => {
-    if (!currentUser?.id || !currentUser?.companyId) {
-      alert('User information is missing. Please try again.');
-      return;
+  const fetchAppointments = async () => {
+    try {
+      if (!currentUser?.id) return;
+
+      const appointmentsQuery = query(
+        collection(db, 'appointments'),
+        where('userId', '==', currentUser.id),
+        where('status', '==', 'scheduled')
+      );
+
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
+      const appointments = await Promise.all(appointmentsSnapshot.docs.map(async docSnapshot => {
+        const data = docSnapshot.data();
+        const userDoc = await getDoc(doc(db, 'users', data.userId));
+        const stallDoc = await getDoc(doc(db, 'stalls', data.stallId));
+        const trailerDoc = await getDoc(doc(db, 'trailers', data.trailerId));
+
+        return {
+          id: docSnapshot.id,
+          ...data,
+          date: data.date.toDate(),
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
+          user: userDoc.data() as User,
+          stall: stallDoc.data() as Stall,
+          trailer: trailerDoc.data() as Trailer
+        } as AppointmentWithDetails;
+      }));
+
+      setAppointments(appointments);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      toast.error('Failed to fetch appointments');
     }
+  };
 
+  const handleBookAppointment = async (appointmentData: Partial<Appointment>) => {
+    if (!user || !userCompany) return;
+    
     try {
       setIsLoading(true);
       
-      // Get user's location
-      let userLocation = null;
-      if (navigator.geolocation) {
-        userLocation = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              resolve({
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-              });
-            },
-            (error) => {
-              console.error('Error getting location:', error);
-              resolve(null);
-            }
-          );
-        });
+      if (!selectedServiceType) {
+        toast.error('Service type is required');
+        return;
       }
       
-      // Find available stalls for the selected service type
-      const availableStalls = companyStalls.filter(stall => 
-        stall.serviceType === selectedServiceType
-      );
-
-      if (availableStalls.length === 0) {
-        throw new Error('No available stalls found for the selected service type');
-      }
-
-      // Find trailers that have these stalls
-      const relevantTrailers = companyTrailers.filter(trailer => 
-        availableStalls.some(stall => stall.trailerGroup === trailer.id)
-      );
-
-      if (relevantTrailers.length === 0) {
-        throw new Error('No available trailers found for the selected service type');
-      }
-
-      // Sort trailers by distance if location is available
-      let sortedTrailers = [...relevantTrailers];
-      if (userLocation) {
-        sortedTrailers.sort((a, b) => {
-          const distanceA = calculateDistance(userLocation, a.location);
-          const distanceB = calculateDistance(userLocation, b.location);
-          return distanceA - distanceB;
-        });
-      }
-
-      // Select the first available stall and its corresponding trailer
-      const selectedStall = availableStalls[0];
-      const selectedTrailer = sortedTrailers.find(t => t.id === selectedStall.trailerGroup);
-
-      if (!selectedTrailer) {
-        throw new Error('Could not find a matching trailer for the selected stall');
-      }
-
-      // First add to Firestore
-      const appointmentDocRef = await addDoc(collection(db, 'appointments'), {
-        userId: currentUser.id,
-        stallId: selectedStall.id,
-        trailerId: selectedTrailer.id,
-        date: Timestamp.fromDate(new Date(appointment.date as Date)),
-        startTime: appointment.startTime || selectedTrailer.startTime,
-        endTime: appointment.startTime
-          ? addMinutesToTime(appointment.startTime, selectedTrailer.duration)
-          : selectedTrailer.endTime,
+      // Create appointment object
+      const appointment: Omit<Appointment, 'id'> = {
+        userId: user.id,
+        companyId: userCompany.id,
+        stallId: appointmentData.stallId as string,
+        trailerId: appointmentData.trailerId as string,
+        date: appointmentData.date as Date,
+        startTime: appointmentData.startTime as string,
+        endTime: appointmentData.endTime as string,
         status: 'scheduled',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        user: currentUser,
-        stall: selectedStall,
-        trailer: selectedTrailer
-      });
-
-      // Step 2: Build final object with ID generated by Firestore
-      const newAppointment: AppointmentWithDetails = {
-        id: appointmentDocRef.id,
-        userId: currentUser.id,
-        stallId: selectedStall.id,
-        trailerId: selectedTrailer.id,
-        date: new Date(appointment.date as Date),
-        startTime: appointment.startTime || selectedTrailer.startTime,
-        endTime: appointment.startTime
-          ? addMinutesToTime(appointment.startTime, selectedTrailer.duration)
-          : selectedTrailer.endTime,
-        status: 'scheduled',
+        serviceType: selectedServiceType,
         createdAt: new Date(),
-        updatedAt: new Date(),
-        user: currentUser,
-        stall: selectedStall,
-        trailer: selectedTrailer
+        updatedAt: new Date()
       };
-
-      // Update local state with the new appointment
-      setAppointments(prev => [...prev, newAppointment]);
-
-      // Show success message with distance if available
-      if (userLocation) {
-        const distance = calculateDistance(userLocation, selectedTrailer.location);
-        alert(`Appointment booked successfully! The trailer is ${distance.toFixed(1)} km away from your location.`);
-      } else {
-        alert('Appointment booked successfully!');
+      
+      console.log('Creating appointment with data:', appointment);
+      
+      // Add appointment to Firestore
+      const docRef = await addDoc(collection(db, 'appointments'), {
+        ...appointment,
+        date: Timestamp.fromDate(appointment.date),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      });
+      
+      console.log('Appointment created with ID:', docRef.id);
+      
+      // Get the stall and trailer for the appointment
+      const stallDoc = await getDoc(doc(db, 'stalls', appointment.stallId));
+      const trailerDoc = await getDoc(doc(db, 'trailers', appointment.trailerId));
+      
+      if (!stallDoc.exists() || !trailerDoc.exists()) {
+        throw new Error('Stall or trailer not found');
       }
-
-      setSelectedDate(null);
-      setSelectedTime('');
+      
+      const stall = stallDoc.data() as Stall;
+      const trailer = trailerDoc.data() as Trailer;
+      
+      // Create appointment with details
+      const newAppointment: AppointmentWithDetails = {
+        id: docRef.id,
+        ...appointment,
+        user: {
+          id: user.id,
+          email: user.email || '',
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+          role: user.role,
+          companyId: user.companyId,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        },
+        stall: {
+          ...stall,
+          id: stallDoc.id
+        },
+        trailer: {
+          ...trailer,
+          id: trailerDoc.id
+        }
+      };
+      
+      // Update appointments state
+      setAppointments(prev => [...prev, newAppointment]);
+      
+      // Close booking form
       setShowBookingForm(false);
       
+      // Reset form state
+      setSelectedDate(null);
+      setSelectedServiceType(null);
+      setAvailableTimeSlots([]);
+      
+      // Show success message
+      toast.success('Appointment booked successfully!');
     } catch (error) {
       console.error('Error booking appointment:', error);
-      alert(error instanceof Error ? error.message : 'Failed to book appointment. Please try again.');
+      toast.error('Failed to book appointment. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -646,23 +995,42 @@ export default function UserDashboardPage() {
       // Get the appointment document reference directly using the ID
       const appointmentRef = doc(db, 'appointments', appointmentId);
       
+      // First, get the appointment data to get the stallId
+      const appointmentDoc = await getDoc(appointmentRef);
+      
+      if (!appointmentDoc.exists()) {
+        alert('Appointment not found. It may have already been cancelled.');
+        return;
+      }
+      
+      const appointmentData = appointmentDoc.data();
+      
       // Update the appointment status
       await updateDoc(appointmentRef, {
         status: 'cancelled',
         updatedAt: Timestamp.now()
       });
       
+      // Update the stall status back to available
+      if (appointmentData.stallId) {
+        const stallRef = doc(db, 'stalls', appointmentData.stallId);
+        await updateDoc(stallRef, {
+          status: 'available',
+          updatedAt: Timestamp.now()
+        });
+      }
+      
       // Update local state
       setAppointments(appointments.filter(appointment => appointment.id !== appointmentId));
       
       // Show success message
-      alert('Appointment cancelled successfully');
+      toast.success('Appointment cancelled successfully');
     } catch (error) {
       console.error('Error cancelling appointment:', error);
       if (error instanceof Error && error.message.includes('No document to update')) {
-        alert('Appointment not found. It may have already been cancelled.');
+        toast.error('Appointment not found. It may have already been cancelled.');
       } else {
-        alert('Failed to cancel appointment. Please try again.');
+        toast.error('Failed to cancel appointment. Please try again.');
       }
     }
   };
@@ -677,12 +1045,42 @@ export default function UserDashboardPage() {
     }
   };
 
+  const handleUpdateProfile = async (updatedUser: Partial<User>) => {
+    if (!currentUser?.id) return;
+    
+    try {
+      // Update user document in Firestore
+      const userRef = doc(db, 'users', currentUser.id);
+      await updateDoc(userRef, updatedUser);
+      
+      // Update local state
+      setCurrentUser(prev => prev ? { ...prev, ...updatedUser } : null);
+      
+      // If email was changed, update auth email
+      if (updatedUser.email && updatedUser.email !== currentUser.email) {
+        // Note: This requires recent authentication, may need to re-authenticate user
+        if (auth.currentUser) {
+          try {
+            await updateEmail(auth.currentUser, updatedUser.email);
+          } catch (error) {
+            console.error('Error updating email in Firebase Auth:', error);
+            // Continue with the profile update even if email update fails
+            // The user may need to re-authenticate to change their email
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw new Error('Failed to update profile. Please try again.');
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1e1b1b] flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mb-6"></div>
-          <p className="text-xl font-medium text-gray-700 animate-pulse">Loading your dashboard...</p>
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#ffa300] mb-6"></div>
+          <p className="text-xl font-medium text-white animate-pulse">Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -702,106 +1100,27 @@ export default function UserDashboardPage() {
   });
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-4 sm:py-8 transition-opacity duration-500 ${isPageLoaded ? 'opacity-100' : 'opacity-0'}`}>
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
-        {/* Header with title, user name, and logout button */}
-        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-8 transform transition-all duration-300 hover:shadow-xl">
-          <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center">
-            <div className="flex items-center">
-              <div className="bg-blue-600 rounded-full p-2 sm:p-3 mr-3 sm:mr-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">BeHeard Queue</h1>
-            </div>
-            
-            {currentUser && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-6">
-                <div className="text-left sm:text-right">
-                  <p className="text-sm text-gray-500">Welcome back,</p>
-                  <p className="font-semibold text-lg sm:text-xl text-gray-800">
-                    {currentUser.firstName} {currentUser.lastName}
-                  </p>
-                  {userLocation && (
-                    <p className="text-xs text-gray-500 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      Location available
-                    </p>
-                  )}
-                  {locationError && (
-                    <p className="text-xs text-red-500 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      {locationError}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="px-3 py-1.5 sm:px-4 sm:py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-300 flex items-center text-sm sm:text-base"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
+    <div className="min-h-screen bg-[#1e1b1b]">
+      {/* Profile Edit Modal */}
+      <ProfileEditModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={currentUser}
+        onUpdate={handleUpdateProfile}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 mt-16">
+        {/* Logo Section */}
+        <div className="flex justify-center mb-8">
+          <img src="/BeHeardLogo.svg" alt="BeHeard Logo" className="h-24 sm:h-32" />
         </div>
 
-        {/* Debug information - Show when either date or service type is selected */}
-        {(selectedDate || selectedServiceType) && (
-          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-8 z-10 relative transform transition-all duration-300 hover:shadow-xl">
-            <h3 className="text-base sm:text-lg font-medium text-gray-800 mb-3 sm:mb-4 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Debug Information
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Selected Date: <span className="text-blue-600">{selectedDate ? format(selectedDate, 'yyyy-MM-dd') : 'Not selected'}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Service Type: <span className="text-blue-600">{selectedServiceType || 'Not selected'}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Available Stalls: <span className="text-blue-600">{companyStalls.filter(s => s.serviceType === selectedServiceType).length}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Available Trailers: <span className="text-blue-600">{companyTrailers.length}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">User Location: <span className="text-blue-600">{userLocation ? 'Available' : 'Not Available'}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Available Time Slots: <span className="text-blue-600">{availableTimeSlots.length}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Show Booking Form: <span className="text-blue-600">{showBookingForm ? 'Yes' : 'No'}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">User Company ID: <span className="text-blue-600">{currentUser?.companyId || 'None'}</span></p>
-              </div>
-              <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
-                <p className="font-medium text-gray-700">Company ID: <span className="text-blue-600">{userCompany?.id || 'None'}</span></p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-8 transform transition-all duration-300 hover:shadow-xl">
+        <div className="bg-[#ffa300] rounded-xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-8 transform transition-all duration-300 hover:shadow-xl">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 space-y-3 sm:space-y-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">My Appointments</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-[#3e2802]">My Appointments</h2>
             <button
               onClick={() => setShowBookingForm(true)}
-              className="px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-300 flex items-center text-sm sm:text-base"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 bg-[#3e2802] text-[#ffffff] rounded-lg hover:bg-[#2a1c01] transition-colors duration-300 flex items-center text-sm sm:text-base"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -811,14 +1130,14 @@ export default function UserDashboardPage() {
           </div>
           
           {/* Tabs for upcoming and past appointments */}
-          <div className="border-b border-gray-200 mb-4 sm:mb-6">
+          <div className="border-b border-[#3e2802] mb-4 sm:mb-6">
             <nav className="flex -mb-px">
               <button
                 onClick={() => setActiveTab('upcoming')}
                 className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'upcoming'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-[#3e2802] text-[#3e2802]'
+                    : 'border-transparent text-[#3e2802] hover:text-[#2a1c01] hover:border-[#2a1c01]'
                 }`}
               >
                 Upcoming
@@ -827,8 +1146,8 @@ export default function UserDashboardPage() {
                 onClick={() => setActiveTab('past')}
                 className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'past'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-[#3e2802] text-[#3e2802]'
+                    : 'border-transparent text-[#3e2802] hover:text-[#2a1c01] hover:border-[#2a1c01]'
                 }`}
               >
                 Past
@@ -841,19 +1160,19 @@ export default function UserDashboardPage() {
               {filteredAppointments.map((appointment, index) => (
                 <div 
                   key={appointment.id} 
-                  className="border rounded-xl p-3 sm:p-5 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1"
+                  className="border border-[#3e2802] rounded-xl p-3 sm:p-5 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1 bg-[#3e2802]"
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
                   <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:justify-between sm:items-start md:items-center">
                     <div className="mb-2 sm:mb-0">
                       <div className="flex items-center mb-1 sm:mb-2">
-                        <h3 className="text-base sm:text-lg font-medium text-gray-800">
+                        <h3 className="text-base sm:text-lg font-medium text-[#ffffff]">
                           {appointment.stall?.serviceType 
                             ? appointment.stall.serviceType.charAt(0).toUpperCase() + appointment.stall.serviceType.slice(1)
                             : 'Service Type Unavailable'}
                         </h3>
                       </div>
-                      <div className="flex items-center text-xs sm:text-sm text-gray-600 mb-1">
+                      <div className="flex items-center text-xs sm:text-sm text-[#ffffff] mb-1">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -861,7 +1180,7 @@ export default function UserDashboardPage() {
                           ? format(appointment.date, 'MMMM d, yyyy')
                           : 'Date Unavailable'} at {appointment.startTime}
                       </div>
-                      <div className="flex items-center text-xs sm:text-sm text-gray-600">
+                      <div className="flex items-center text-xs sm:text-sm text-[#ffffff]">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -884,16 +1203,16 @@ export default function UserDashboardPage() {
             </div>
           ) : (
             <div className="text-center py-8 sm:py-12">
-              <div className="bg-gray-100 rounded-full p-3 sm:p-4 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="bg-[#3e2802] rounded-full p-3 sm:p-4 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-[#ffa300]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">You don't have any {activeTab} appointments</p>
+              <p className="text-sm sm:text-base text-[#ffffff] mb-3 sm:mb-4">You don't have any {activeTab} appointments</p>
               {activeTab === 'upcoming' && (
                 <button
                   onClick={() => setShowBookingForm(true)}
-                  className="bg-blue-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors duration-300 flex items-center mx-auto text-sm sm:text-base"
+                  className="bg-[#3e2802] text-[#ffa300] px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-[#2a1c01] transition-colors duration-300 flex items-center mx-auto text-sm sm:text-base"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -917,6 +1236,7 @@ export default function UserDashboardPage() {
           setSelectedServiceType={setSelectedServiceType}
           userCompany={userCompany}
           isLoading={isLoading}
+          userLocation={userLocation}
         />
       )}
     </div>
@@ -936,17 +1256,18 @@ function addMinutesToTime(time: string, minutes: number): string {
   return format(date, 'h:mm a');
 }
 
-function calculateDistance(point1: { lat: number; lng: number }, point2: string): number {
-  // Parse the location string (assuming format "lat,lng")
-  const [lat, lng] = point2.split(',').map(Number);
+function calculateDistance(point1: string, point2: string): number {
+  // Parse the location strings (assuming format "lat,lng")
+  const [lat1, lng1] = point1.split(',').map(Number);
+  const [lat2, lng2] = point2.split(',').map(Number);
   
   // Haversine formula to calculate distance between two points on Earth
   const R = 6371; // Earth's radius in kilometers
-  const dLat = toRad(lat - point1.lat);
-  const dLon = toRad(lng - point1.lng);
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lng2 - lng1);
   const a = 
     Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(toRad(point1.lat)) * Math.cos(toRad(lat)) * 
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
     Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;

@@ -31,14 +31,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Get all available stalls for the company
+    // 2. Get all stalls for the company (regardless of status)
     const stallsQuery = query(
       collection(db, 'stalls'),
-      where('companyId', '==', companyId),
-      where('status', '==', 'available')
+      where('companyId', '==', companyId)
     );
     const stallsSnapshot = await getDocs(stallsQuery);
-    const availableStalls = stallsSnapshot.docs.map(doc => ({
+    const allStalls = stallsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Stall[];
@@ -54,7 +53,16 @@ export async function POST(request: Request) {
       ...doc.data()
     })) as Trailer[];
 
-    // 4. Sort trailers by distance if user location is provided
+    // 4. Get all appointments for the selected date
+    const appointmentsQuery = query(
+      collection(db, 'appointments'),
+      where('companyId', '==', companyId),
+      where('date', '==', Timestamp.fromDate(selectedDate))
+    );
+    const appointmentsSnapshot = await getDocs(appointmentsQuery);
+    const existingAppointments = appointmentsSnapshot.docs.map(doc => doc.data());
+
+    // 5. Sort trailers by distance if user location is provided
     if (userLocation) {
       trailers.sort((a, b) => {
         const distanceA = calculateDistance(userLocation, a.location);
@@ -63,51 +71,71 @@ export async function POST(request: Request) {
       });
     }
 
-    // 5. Find the best available stall and trailer
+    // 6. Find the best available stall and trailer
     let selectedStall = null;
     let selectedTrailer = null;
 
     // Try each trailer in order of proximity
     for (const trailer of trailers) {
-      // Find available stalls for this trailer
-      const trailerStalls = availableStalls.filter(stall => stall.trailerGroup === trailer.id);
+      // Find stalls for this trailer
+      const trailerStalls = allStalls.filter(stall => stall.trailerGroup === trailer.id);
       
-      if (trailerStalls.length > 0) {
-        selectedStall = trailerStalls[0];
-        selectedTrailer = trailer;
-        break;
+      // Check each stall's availability based on existing appointments only
+      // IGNORE the stall's current status completely
+      for (const stall of trailerStalls) {
+        const stallAppointments = existingAppointments.filter(app => app.stallId === stall.id);
+        const isTimeSlotAvailable = !stallAppointments.some(app => {
+          return (
+            (preferredTime >= app.startTime && preferredTime < app.endTime) ||
+            (addMinutesToTime(preferredTime, stall.duration ?? 30) > app.startTime && 
+             addMinutesToTime(preferredTime, stall.duration ?? 30) <= app.endTime)
+          );
+        });
+
+        if (isTimeSlotAvailable) {
+          selectedStall = stall;
+          selectedTrailer = trailer;
+          break;
+        }
       }
+      
+      if (selectedStall && selectedTrailer) break;
     }
 
     if (!selectedStall || !selectedTrailer) {
       return NextResponse.json(
-        { error: 'No available stalls or trailers found' },
+        { error: 'No available stalls found for the selected time' },
         { status: 404 }
       );
     }
 
-    // 6. Create the appointment
+    // 7. Create the appointment
+    const appointmentDate = new Date(date);
+    console.log('Creating appointment with date:', {
+      originalDate: date,
+      parsedDate: appointmentDate.toISOString(),
+      timestamp: Timestamp.fromDate(appointmentDate).toDate().toISOString()
+    });
+    
     const appointmentData = {
       userId,
       companyId,
       stallId: selectedStall.id,
       trailerId: selectedTrailer.id,
-      date: Timestamp.fromDate(new Date(date)),
+      date: Timestamp.fromDate(appointmentDate),
       startTime: preferredTime,
-      endTime: addMinutesToTime(preferredTime, selectedTrailer.duration),
+      endTime: addMinutesToTime(preferredTime, selectedStall.duration ?? 30),
       status: 'scheduled',
+      serviceType: selectedStall.serviceType || 'shower',
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     };
-
+    
+    console.log('Appointment data being created:', appointmentData);
+    
     const appointmentRef = await addDoc(collection(db, 'appointments'), appointmentData);
-
-    // 7. Update stall status
-    const stallRef = doc(db, 'stalls', selectedStall.id);
-    await updateDoc(stallRef, {
-      status: 'in_use',
-      updatedAt: Timestamp.now()
-    });
+    
+    console.log('Appointment created with ID:', appointmentRef.id);
 
     return NextResponse.json({
       success: true,

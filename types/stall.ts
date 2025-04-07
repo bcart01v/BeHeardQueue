@@ -4,10 +4,12 @@ export type ServiceType = 'shower' | 'laundry' | 'haircut';
 export interface Stall {
   id: string;
   name: string;
-  companyId: string; // The company the stall belongs to
-  trailerGroup: string; // The trailer ID this stall belongs to
+  companyId: string;
+  trailerGroup: string;
   status: StallStatus;
   serviceType: ServiceType;
+  duration: number;
+  bufferTime: number;
   createdAt: Date;
   updatedAt: Date;
 }
