@@ -6,11 +6,12 @@ export interface User {
   firstName: string;
   lastName: string;
   role: 'admin' | 'user' | 'software-owner';
-  companyId: string;
+  companyId: string; // The company the user belongs to
   createdAt: Date;
   updatedAt: Date;
   displayName?: string;
-  currentCompanyId?: string; // The company the user is currently viewing
+  phone?: string; // User's phone number
+  profilePhoto?: string; // URL to the user's profile photo
 }
 
 export interface Company {

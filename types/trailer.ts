@@ -1,14 +1,12 @@
 export interface Trailer {
   id: string;
   name: string;
-  companyId: string; // The company the trailer belongs to
+  companyId: string;
   startTime: string;
   endTime: string;
-  duration: number;
-  bufferTime: number;
-  slotsPerBlock: number;
-  stalls: string[]; // Array of stall IDs
+  stalls: never[];
   location: string;
+  duration?: number; // Duration of each appointment in minutes (optional)
   createdAt: Date;
   updatedAt: Date;
 }

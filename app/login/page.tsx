@@ -53,9 +53,9 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="bg-white shadow-lg rounded-lg p-8 w-full max-w-md">
-        <h2 className="text-2xl font-bold text-black text-center">Login</h2>
+    <div className="flex min-h-screen items-center justify-center bg-[#1e1b1b]">
+      <div className="bg-[#ffa300] shadow-lg rounded-lg p-8 w-full max-w-md">
+        <h2 className="text-2xl font-bold text-[#3e2802] text-center">Login</h2>
         
         {error && (
           <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
@@ -67,7 +67,7 @@ const LoginPage = () => {
           {/* Email Field */}
           <div>
             <label
-              className="block text-sm font-medium text-black"
+              className="block text-sm font-medium text-[#3e2802]"
             >
               Email:
             </label>
@@ -76,7 +76,7 @@ const LoginPage = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-2 mt-1 border rounded-md text-black placeholder-gray-500"
+              className="w-full px-4 py-2 mt-1 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff] placeholder-[#3e2802]"
               placeholder="Enter your email"
               disabled={isLoading}
             />
@@ -84,7 +84,7 @@ const LoginPage = () => {
           {/* Password Field */}
           <div>
             <label
-              className="block text-sm font-medium text-black"
+              className="block text-sm font-medium text-[#3e2802]"
             >
               Password:
             </label>
@@ -93,7 +93,7 @@ const LoginPage = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-2 mt-1 border rounded-md text-black placeholder-gray-500"
+              className="w-full px-4 py-2 mt-1 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff] placeholder-[#3e2802]"
               placeholder="Enter your password"
               disabled={isLoading}
             />
@@ -101,15 +101,15 @@ const LoginPage = () => {
           
           {/* Forgot Password Link */}
           <div className="text-right">
-            <a href="/forgot-password" className="text-sm text-black hover:text-gray-700">
+            <a href="/forgot-password" className="text-sm text-[#3e2802] hover:text-[#2a1c01]">
               Forgot your password?
             </a>
           </div>
           
           {/* Submit Button */}
-          <button 
+          <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[#3e2802] text-[#ffa300] font-semibold py-2 px-4 rounded-md hover:bg-[#2a1c01] disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             disabled={isLoading}
           >
             {isLoading ? "Logging in..." : "Login"}
@@ -118,12 +118,12 @@ const LoginPage = () => {
         
         {/* Register Redirect */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-black">
+          <p className="text-sm text-[#3e2802]">
             Don't have an account?
           </p>
           <a
             href="/register"
-            className="mt-2 inline-block text-black hover:text-gray-700"
+            className="mt-2 inline-block text-[#3e2802] hover:text-[#2a1c01]"
           >
             Register here
           </a>
