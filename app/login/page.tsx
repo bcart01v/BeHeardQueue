@@ -35,13 +35,13 @@ const LoginPage = () => {
           
           // Redirect based on user role
           if (userData.role === 'admin' || userData.role === 'software-owner') {
-            router.push("/admin");
+            router.push("/admin_home");
           } else {
             router.push("/userDashboard");
           }
         } else {
-          // If user document doesn't exist, redirect to admin as fallback
-          router.push("/admin");
+          // If user document doesn't exist, redirect to admin_home as fallback
+          router.push("/admin_home");
         }
       }
     } catch (err: any) {
