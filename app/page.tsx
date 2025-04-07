@@ -6,21 +6,33 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Company } from '@/types/company';
 import Link from 'next/link';
+import { useAuth } from './components/AuthContext';
 
 // Component that uses useSearchParams
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyId = searchParams.get('companyId');
+  const { user, loading: authLoading } = useAuth();
   
   const [company, setCompany] = useState<Company | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // If user is logged in, redirect based on role
+    if (!authLoading && user) {
+      if (user.role === 'admin') {
+        router.push('/admin_home');
+      } else {
+        router.push('/userDashboard');
+      }
+      return;
+    }
+
     const fetchCompanyData = async () => {
       if (!companyId) {
-        setLoading(false);
+        setIsLoading(false);
         return;
       }
 
@@ -36,12 +48,12 @@ function HomeContent() {
         console.error('Error fetching company data:', error);
         setError('An error occurred while fetching company data');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
     fetchCompanyData();
-  }, [companyId]);
+  }, [companyId, user, authLoading, router]);
 
   const handleSignup = () => {
     if (companyId) {
@@ -51,7 +63,7 @@ function HomeContent() {
     }
   };
 
-  if (loading) {
+  if (isLoading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

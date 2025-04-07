@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { collection, query, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { logout } from '@/lib/auth';
 
 interface Company {
   id: string;
@@ -79,6 +80,7 @@ export default function AdminHeader() {
 
   const handleLogout = async () => {
     try {
+      await logout();
       router.push('/login');
     } catch (error) {
       console.error('Error logging out:', error);
