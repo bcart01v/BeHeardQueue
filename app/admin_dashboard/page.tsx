@@ -116,6 +116,9 @@ interface AppointmentBookingModalProps {
   companyId: string;
   onAppointmentCreated: () => void;
   selectedTimeSlot: {time: string, stallId: string, trailerId: string} | null;
+  setSelectedTimeSlot: (timeSlot: {time: string, stallId: string, trailerId: string} | null) => void;
+  companyStartTime: string;
+  companyEndTime: string;
 }
 
 function getCurrentTimeString(): string {
@@ -1008,8 +1011,11 @@ function AppointmentBookingModal({
   user,
   companyId,
   onAppointmentCreated,
-  selectedTimeSlot
-}: AppointmentBookingModalProps & { selectedTimeSlot: {time: string, stallId: string, trailerId: string} | null }) {
+  selectedTimeSlot,
+  setSelectedTimeSlot,
+  companyStartTime,
+  companyEndTime
+}: AppointmentBookingModalProps) {
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1019,8 +1025,9 @@ function AppointmentBookingModal({
   useEffect(() => {
     if (selectedTimeSlot) {
       // Fetch the stall data
-      const fetchStallData = async () => {
+      const fetchData = async () => {
         try {
+          // Fetch stall data
           const stallDoc = await getDoc(doc(db, 'stalls', selectedTimeSlot.stallId));
           if (stallDoc.exists()) {
             const data = stallDoc.data();
@@ -1028,17 +1035,17 @@ function AppointmentBookingModal({
             setSelectedService(data.serviceType as ServiceType);
           }
         } catch (error) {
-          console.error('Error fetching stall data:', error);
+          console.error('Error fetching data:', error);
         }
       };
       
-      fetchStallData();
+      fetchData();
     }
   }, [selectedTimeSlot]);
 
   const handleCreateAppointment = async () => {
-    if (!selectedTimeSlot || !stallData) {
-      setError('No time slot or stall data available');
+    if (!selectedTimeSlot || !stallData || !selectedService) {
+      setError('Please select a service type');
       return;
     }
 
@@ -1046,18 +1053,14 @@ function AppointmentBookingModal({
     setError(null);
 
     try {
-      // Convert selected time to 24-hour format for storage
-      const [time, period] = selectedTimeSlot.time.split(' ');
-      const [hoursStr, minutesStr] = time.split(':');
-      let hours = parseInt(hoursStr, 10);
-      const minutes = parseInt(minutesStr, 10);
-
-      if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-      if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
-
-      const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      // The time is already in 24-hour format, so we don't need to convert it
+      const timeString = selectedTimeSlot.time;
 
       // Calculate end time
+      const [hoursStr, minutesStr] = timeString.split(':');
+      const hours = parseInt(hoursStr, 10);
+      const minutes = parseInt(minutesStr, 10);
+      
       const endDate = new Date();
       endDate.setHours(hours);
       endDate.setMinutes(minutes);
@@ -1102,7 +1105,7 @@ function AppointmentBookingModal({
         companyId,
         stallId: selectedTimeSlot.stallId,
         trailerId: selectedTimeSlot.trailerId,
-        serviceType: stallData.serviceType,
+        serviceType: selectedService,
         date: Timestamp.fromDate(now),
         startTime: timeString,
         endTime: endTimeString,
@@ -1142,11 +1145,54 @@ function AppointmentBookingModal({
         )}
 
         <div className="space-y-4">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#ffa300] mb-2">
+              Service Type *
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedService('shower')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedService === 'shower'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Shower
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedService('laundry')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedService === 'laundry'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Laundry
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedService('haircut')}
+                className={`p-3 rounded-md transition-colors ${
+                  selectedService === 'haircut'
+                    ? 'bg-[#3e2802] text-[#ffa300]'
+                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                }`}
+              >
+                Haircut
+              </button>
+            </div>
+            {!selectedService && (
+              <p className="mt-2 text-sm text-red-600">Please select a service type</p>
+            )}
+          </div>
+
           {selectedTimeSlot && (
             <div className="bg-[#3e2802] p-4 rounded-lg">
               <h3 className="text-[#ffa300] font-medium mb-2">Selected Time Slot</h3>
               <p className="text-white">Time: {selectedTimeSlot.time}</p>
-              <p className="text-white">Service: {selectedService}</p>
             </div>
           )}
 
@@ -1161,7 +1207,7 @@ function AppointmentBookingModal({
             <button
               type="button"
               onClick={handleCreateAppointment}
-              disabled={loading || !selectedTimeSlot}
+              disabled={loading || !selectedTimeSlot || !selectedService}
               className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded-md hover:bg-[#ffb733] disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Appointment'}
@@ -1418,6 +1464,7 @@ export default function AdminDashboardPage() {
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<{time: string, stallId: string, trailerId: string} | null>(null);
   const [selectedTrailerId, setSelectedTrailerId] = useState<string | null>(null);
+  const [showError, setShowError] = useState<string | null>(null);
 
   // Fetch initial data
   useEffect(() => {
@@ -1914,6 +1961,30 @@ export default function AdminDashboardPage() {
     setShowUserSelectionModal(true);
   };
 
+  const handleCreateAppointmentClick = () => {
+    if (!selectedTimeSlot) {
+      setShowError('Please select a time slot first');
+      return;
+    }
+    setShowUserSelectionModal(true);
+  };
+
+  const handleExistingUserSelectClick = () => {
+    setShowUserSelectionModal(false);
+    setShowExistingUserModal(true);
+  };
+
+  const handleNewUserSelect = () => {
+    setShowUserSelectionModal(false);
+    setShowNewUserModal(true);
+  };
+
+  const handleUserSelect = (user: User) => {
+    setShowExistingUserModal(false);
+    setSelectedUser(user);
+    setShowAppointmentModal(true);
+  };
+
   const handleStallStatusChange = async (stallId: string, newStatus: string) => {
     try {
       const stallRef = doc(db, 'stalls', stallId);
@@ -1946,14 +2017,8 @@ export default function AdminDashboardPage() {
       <UserSelectionModal
         isOpen={showUserSelectionModal}
         onClose={() => setShowUserSelectionModal(false)}
-        onExistingUser={() => {
-          setShowUserSelectionModal(false);
-          setShowExistingUserModal(true);
-        }}
-        onNewUser={() => {
-          setShowUserSelectionModal(false);
-          setShowNewUserModal(true);
-        }}
+        onExistingUser={handleExistingUserSelectClick}
+        onNewUser={handleNewUserSelect}
       />
 
       <ExistingUserSearchModal
@@ -1982,6 +2047,9 @@ export default function AdminDashboardPage() {
           companyId={currentUser?.companyId || ''}
           onAppointmentCreated={handleAppointmentCreated}
           selectedTimeSlot={selectedTimeSlot}
+          setSelectedTimeSlot={setSelectedTimeSlot}
+          companyStartTime={companyStartTime}
+          companyEndTime={companyEndTime}
         />
       )}
 
