@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -12,8 +12,12 @@ import {
   UserGroupIcon,
   SparklesIcon,
   TruckIcon,
-  ScissorsIcon
+  ScissorsIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
+import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 
 interface User {
   id: string;
@@ -60,6 +64,28 @@ interface Statistics {
   userCount: number;
 }
 
+interface Appointment {
+  id: string;
+  userId: string;
+  companyId: string;
+  serviceType: 'shower' | 'laundry' | 'haircut';
+  date: Date;
+  startTime: string;
+  endTime: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  stallId: string;
+  stallName?: string;
+  userName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface GroupedAppointments {
+  [date: string]: {
+    [userId: string]: Appointment[];
+  };
+}
+
 export default function AdminHomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -70,6 +96,13 @@ export default function AdminHomePage() {
     scheduledHaircuts: 0,
     userCount: 0
   });
+  const [futureAppointments, setFutureAppointments] = useState<Appointment[]>([]);
+  const [groupedAppointments, setGroupedAppointments] = useState<GroupedAppointments>({});
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [endDate, setEndDate] = useState<Date>(addDays(new Date(), 7));
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const router = useRouter();
 
   // Fetch initial data
@@ -232,6 +265,163 @@ export default function AdminHomePage() {
     (window as any).debugUserData = debugUserData;
   }, [currentUser]);
 
+  // Fetch future appointments
+  const fetchFutureAppointments = async () => {
+    if (!currentUser?.companyId) return;
+    
+    try {
+      setIsLoadingAppointments(true);
+      
+      // Convert dates to Firestore Timestamps
+      const startTimestamp = Timestamp.fromDate(startDate);
+      const endTimestamp = Timestamp.fromDate(endDate);
+      
+      console.log('Fetching appointments between:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+      
+      // Query for appointments in the date range
+      const appointmentsQuery = query(
+        collection(db, 'appointments'),
+        where('companyId', '==', currentUser.companyId),
+        where('date', '>=', startTimestamp),
+        where('date', '<=', endTimestamp),
+        where('status', 'in', ['scheduled', 'in_progress']),
+        orderBy('date', 'asc')
+      );
+      
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
+      
+      // Get all users for this company to map IDs to names
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('companyId', '==', currentUser.companyId)
+      );
+      const usersSnapshot = await getDocs(usersQuery);
+      const usersMap = new Map();
+      
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        usersMap.set(doc.id, userData.firstName && userData.lastName 
+          ? `${userData.firstName} ${userData.lastName}` 
+          : userData.email || `User ${doc.id.substring(0, 4)}`);
+      });
+      
+      // Get all stalls for this company to map IDs to names
+      const stallsQuery = query(
+        collection(db, 'stalls'),
+        where('companyId', '==', currentUser.companyId)
+      );
+      const stallsSnapshot = await getDocs(stallsQuery);
+      const stallsMap = new Map();
+      
+      stallsSnapshot.forEach(doc => {
+        const stallData = doc.data();
+        stallsMap.set(doc.id, stallData.name || `Stall ${doc.id.substring(0, 4)}`);
+      });
+      
+      const appointments: Appointment[] = [];
+      
+      appointmentsSnapshot.forEach(doc => {
+        const data = doc.data();
+        const stallName = stallsMap.get(data.stallId) || `Stall ${data.stallId.substring(0, 4)}`;
+        const userName = usersMap.get(data.userId) || `User ${data.userId.substring(0, 4)}`;
+        
+        appointments.push({
+          id: doc.id,
+          userId: data.userId,
+          companyId: data.companyId,
+          serviceType: data.serviceType,
+          date: data.date.toDate(),
+          startTime: data.startTime,
+          endTime: data.endTime,
+          status: data.status,
+          stallId: data.stallId,
+          stallName: stallName,
+          userName: userName,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate()
+        });
+      });
+      
+      setFutureAppointments(appointments);
+      
+      // Group appointments by date and user
+      const grouped: GroupedAppointments = {};
+      
+      appointments.forEach(appointment => {
+        const dateStr = format(appointment.date, 'yyyy-MM-dd');
+        
+        if (!grouped[dateStr]) {
+          grouped[dateStr] = {};
+        }
+        
+        if (!grouped[dateStr][appointment.userId]) {
+          grouped[dateStr][appointment.userId] = [];
+        }
+        
+        grouped[dateStr][appointment.userId].push(appointment);
+      });
+      
+      setGroupedAppointments(grouped);
+    } catch (error) {
+      console.error('Error fetching future appointments:', error);
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  };
+  
+  // Update appointments when date range changes
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      fetchFutureAppointments();
+    }
+  }, [currentUser?.companyId, startDate, endDate]);
+  
+  // Handle date navigation
+  const handlePrevWeek = () => {
+    setStartDate(subDays(startDate, 7));
+    setEndDate(subDays(endDate, 7));
+  };
+  
+  const handleNextWeek = () => {
+    setStartDate(addDays(startDate, 7));
+    setEndDate(addDays(endDate, 7));
+  };
+  
+  // Format date for display
+  const formatDateDisplay = (dateStr: string) => {
+    const date = parseISO(dateStr);
+    return format(date, 'EEEE, MMMM d, yyyy');
+  };
+  
+  // Get service icon based on service type
+  const getServiceIcon = (serviceType: string) => {
+    switch (serviceType) {
+      case 'shower':
+        return <SparklesIcon className="h-5 w-5 text-blue-500" />;
+      case 'laundry':
+        return <TruckIcon className="h-5 w-5 text-green-500" />;
+      case 'haircut':
+        return <ScissorsIcon className="h-5 w-5 text-purple-500" />;
+      default:
+        return null;
+    }
+  };
+
+  // Handle appointment click
+  const handleAppointmentClick = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setIsAppointmentModalOpen(true);
+  };
+
+  // Close appointment modal
+  const closeAppointmentModal = () => {
+    setIsAppointmentModalOpen(false);
+    setSelectedAppointment(null);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
@@ -310,6 +500,188 @@ export default function AdminHomePage() {
             </div>
           </Link>
         </div>
+        
+        {/* Future Appointments Section */}
+        <div className="mt-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-[#ffa300]">Future Appointments</h2>
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={handlePrevWeek}
+                className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+              >
+                <ChevronLeftIcon className="h-5 w-5" />
+              </button>
+              <span className="text-[#ffa300]">
+                {format(startDate, 'MMM d')} - {format(endDate, 'MMM d, yyyy')}
+              </span>
+              <button 
+                onClick={handleNextWeek}
+                className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+              >
+                <ChevronRightIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          
+          {isLoadingAppointments ? (
+            <div className="flex justify-center py-8">
+              <div className="text-[#ffa300]">Loading appointments...</div>
+            </div>
+          ) : Object.keys(groupedAppointments).length === 0 ? (
+            <div className="bg-[#3e2802] rounded-lg p-6 text-center">
+              <p className="text-[#ffa300]">No appointments found for the selected date range.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.keys(groupedAppointments).sort().map(dateStr => (
+                <div key={dateStr} className="bg-[#3e2802] rounded-lg overflow-hidden">
+                  <div className="bg-[#2a1c01] p-4">
+                    <h3 className="text-lg font-semibold text-[#ffa300]">{formatDateDisplay(dateStr)}</h3>
+                  </div>
+                  <div className="p-4">
+                    {Object.keys(groupedAppointments[dateStr]).map(userId => (
+                      <div key={userId} className="mb-6 last:mb-0">
+                        <h4 className="text-md font-medium text-[#ffa300] mb-2">
+                          {groupedAppointments[dateStr][userId][0].userName}
+                        </h4>
+                        <div className="space-y-2">
+                          {groupedAppointments[dateStr][userId].map(appointment => (
+                            <div 
+                              key={appointment.id} 
+                              className="flex items-center justify-between bg-[#1e1b1b] p-3 rounded-md cursor-pointer hover:bg-[#2a1c01] transition-colors duration-200"
+                              onClick={() => handleAppointmentClick(appointment)}
+                            >
+                              <div className="flex items-center space-x-3">
+                                {getServiceIcon(appointment.serviceType)}
+                                <div>
+                                  <p className="text-[#ffa300] font-medium capitalize">
+                                    {appointment.serviceType}
+                                  </p>
+                                  <p className="text-sm text-gray-400">
+                                    {appointment.startTime} - {appointment.endTime}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-400">
+                                  {appointment.stallName}
+                                </p>
+                                <p className={`text-xs ${
+                                  appointment.status === 'scheduled' ? 'text-blue-400' :
+                                  appointment.status === 'in_progress' ? 'text-green-400' :
+                                  appointment.status === 'completed' ? 'text-gray-400' :
+                                  'text-red-400'
+                                }`}>
+                                  {appointment.status.replace('_', ' ')}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* Appointment Details Modal */}
+        {isAppointmentModalOpen && selectedAppointment && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#3e2802] rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center p-4 border-b border-[#2a1c01]">
+                <h3 className="text-xl font-bold text-[#ffa300]">Appointment Details</h3>
+                <button 
+                  onClick={closeAppointmentModal}
+                  className="text-[#ffa300] hover:text-white transition-colors duration-200"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm text-gray-400">Client</h4>
+                      <p className="text-[#ffa300] font-medium">{selectedAppointment.userName}</p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Service Type</h4>
+                      <div className="flex items-center space-x-2">
+                        {getServiceIcon(selectedAppointment.serviceType)}
+                        <p className="text-[#ffa300] font-medium capitalize">{selectedAppointment.serviceType}</p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Date</h4>
+                      <p className="text-[#ffa300]">{format(selectedAppointment.date, 'EEEE, MMMM d, yyyy')}</p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Time</h4>
+                      <p className="text-[#ffa300]">{selectedAppointment.startTime} - {selectedAppointment.endTime}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm text-gray-400">Status</h4>
+                      <p className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        selectedAppointment.status === 'scheduled' ? 'bg-blue-900 text-blue-300' :
+                        selectedAppointment.status === 'in_progress' ? 'bg-green-900 text-green-300' :
+                        selectedAppointment.status === 'completed' ? 'bg-gray-700 text-gray-300' :
+                        'bg-red-900 text-red-300'
+                      }`}>
+                        {selectedAppointment.status.replace('_', ' ')}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Stall</h4>
+                      <p className="text-[#ffa300]">{selectedAppointment.stallName}</p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Appointment ID</h4>
+                      <p className="text-[#ffa300] font-mono text-sm">{selectedAppointment.id}</p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm text-gray-400">Created</h4>
+                      <p className="text-[#ffa300]">{format(selectedAppointment.createdAt, 'MMM d, yyyy h:mm a')}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 flex justify-end space-x-3">
+                  <button 
+                    onClick={closeAppointmentModal}
+                    className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded-md hover:bg-[#2a1c01] transition-colors duration-200"
+                  >
+                    Close
+                  </button>
+                  <button 
+                    onClick={() => {
+                      // Navigate to admin dashboard with this appointment selected and the correct date
+                      const appointmentDate = format(selectedAppointment.date, 'yyyy-MM-dd');
+                      router.push(`/admin_dashboard?appointmentId=${selectedAppointment.id}&date=${appointmentDate}`);
+                      closeAppointmentModal();
+                    }}
+                    className="px-4 py-2 bg-[#ffa300] text-[#3e2802] rounded-md hover:bg-[#e69200] transition-colors duration-200"
+                  >
+                    View in Dashboard
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

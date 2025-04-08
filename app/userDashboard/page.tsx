@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Appointment, AppointmentWithDetails } from '@/types/appointment';
+import { Appointment, AppointmentWithDetails, HistoricalAppointment, AppointmentStatus } from '@/types/appointment';
 import { Company } from '@/types/company';
 import { Trailer } from '@/types/trailer';
 import { Stall, ServiceType } from '@/types/stall';
 import { User } from '@/types/user';
-import { format, addDays, isAfter, isBefore, parseISO, addMinutes, isToday, isFuture, startOfDay } from 'date-fns';
+import { format, addDays, isAfter, isBefore, parseISO, addMinutes, isToday, isFuture, startOfDay, isSameDay } from 'date-fns';
 import { useAuth } from '@/app/components/AuthContext';
 import { useRouter } from 'next/navigation';
 import { signOut, updateEmail } from 'firebase/auth';
@@ -283,154 +283,195 @@ function BookingForm({
     fetchAvailableStalls();
   }, [selectedServiceType]);
 
-  // Validate time slot selection when it changes
+  // Helper function to check for existing bookings
+  const getExistingBookings = async (
+    stallId: string,
+    date: Date,
+    startTime: string,
+    duration: number,
+    bufferTime: number
+  ) => {
+    // Create Date objects for the appointment window
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const appointmentStart = new Date(date);
+    appointmentStart.setHours(hours, minutes, 0, 0);
+
+    const appointmentEnd = new Date(appointmentStart);
+    appointmentEnd.setMinutes(appointmentEnd.getMinutes() + duration);
+
+    // Add buffer time to the window
+    const windowStart = new Date(appointmentStart);
+    windowStart.setMinutes(windowStart.getMinutes() - bufferTime);
+
+    const windowEnd = new Date(appointmentEnd);
+    windowEnd.setMinutes(windowEnd.getMinutes() + bufferTime);
+
+    // Create a date object set to noon to avoid timezone issues
+    const queryDate = new Date(date);
+    queryDate.setHours(12, 0, 0, 0);
+
+    // Query for overlapping appointments
+    const appointmentsQuery = query(
+      collection(db, 'appointments'),
+      where('stallId', '==', stallId),
+      where('date', '==', Timestamp.fromMillis(queryDate.getTime())),
+      where('status', '==', 'scheduled')
+    );
+
+    const appointmentsSnapshot = await getDocs(appointmentsQuery);
+    const overlappingAppointments = [];
+
+    for (const doc of appointmentsSnapshot.docs) {
+      const appointment = doc.data();
+      const [appHours, appMinutes] = appointment.startTime.split(':').map(Number);
+      const appStart = new Date(date);
+      appStart.setHours(appHours, appMinutes, 0, 0);
+
+      const appEnd = new Date(appStart);
+      appEnd.setMinutes(appEnd.getMinutes() + appointment.duration);
+
+      // Check if appointments overlap
+      if (
+        (appStart <= windowEnd && appEnd >= windowStart) ||
+        (appointmentStart <= appEnd && appointmentEnd >= appStart)
+      ) {
+        overlappingAppointments.push(appointment);
+      }
+    }
+
+    return overlappingAppointments;
+  };
+
+  // Validate time slot when it changes
   useEffect(() => {
     if (selectedTimeSlot) {
       validateTimeSlot(selectedTimeSlot);
     }
   }, [selectedTimeSlot]);
 
-  const validateTimeSlot = async (slot: {
+  const validateTimeSlot = async (timeSlot: {
     time: string;
     stallId: string;
     trailerId: string;
     duration: number;
     bufferTime: number;
   }) => {
-    setIsValidating(true);
-    setError(null);
-    
-    try {
-      console.log('Validating time slot:', slot);
-      
-      // Check if the stall exists
-      const stallDoc = await getDoc(doc(db, 'stalls', slot.stallId));
-      if (!stallDoc.exists()) {
-        console.log('Stall not found:', slot.stallId);
-        setError('Selected stall not found');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      const stall = stallDoc.data() as Stall;
-      console.log('Stall data:', stall);
-      
-      // Only check stall status for same-day bookings
-      const today = new Date();
-      const isSameDay = selectedDate && 
-        today.getFullYear() === selectedDate.getFullYear() &&
-        today.getMonth() === selectedDate.getMonth() &&
-        today.getDate() === selectedDate.getDate();
-      
-      if (isSameDay && stall.status !== 'available') {
-        console.log('Stall status is not available for same-day booking:', stall.status);
-        setError('Selected stall is not available');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      if (stall.serviceType !== selectedServiceType) {
-        console.log('Stall service type mismatch:', stall.serviceType, 'vs', selectedServiceType);
-        setError('Selected stall does not provide the requested service type');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      // Check if the trailer exists
-      const trailerDoc = await getDoc(doc(db, 'trailers', slot.trailerId));
-      if (!trailerDoc.exists()) {
-        console.log('Trailer not found:', slot.trailerId);
-        setError('Selected trailer not found');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      const trailer = trailerDoc.data() as Trailer;
-      console.log('Trailer data:', trailer);
-      
-      // Check if the stall belongs to the trailer
-      console.log('Stall trailer group:', stall.trailerGroup, 'vs selected trailer ID:', slot.trailerId);
-      if (stall.trailerGroup !== slot.trailerId) {
-        console.log('Stall does not belong to the selected trailer');
-        setError('Selected stall does not belong to the selected trailer');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      // Check if the time slot is within the trailer's operating hours
-      const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
-      const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
-      
-      const trailerStartTime = new Date(selectedDate as Date);
-      trailerStartTime.setHours(startHour, startMinute, 0, 0);
-      
-      const trailerEndTime = new Date(selectedDate as Date);
-      trailerEndTime.setHours(endHour, endMinute, 0, 0);
-      
-      const appointmentStartTime = new Date(selectedDate as Date);
-      // Parse time in 12-hour format with AM/PM
-      const timeParts = slot.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      if (!timeParts) {
-        console.log('Invalid time format:', slot.time);
-        setError('Invalid time format');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      let [_, hours, minutes, period] = timeParts;
-      let hour = parseInt(hours);
-      const minute = parseInt(minutes);
-      
-      // Convert to 24-hour format
-      if (period.toUpperCase() === 'PM' && hour < 12) {
-        hour += 12;
-      } else if (period.toUpperCase() === 'AM' && hour === 12) {
-        hour = 0;
-      }
-      
-      console.log('Parsed time:', { hour, minute, period, original: slot.time });
-      appointmentStartTime.setHours(hour, minute, 0, 0);
-      
-      console.log('Time comparison:', {
-        appointmentStartTime: appointmentStartTime.toLocaleTimeString(),
-        trailerStartTime: trailerStartTime.toLocaleTimeString(),
-        trailerEndTime: trailerEndTime.toLocaleTimeString(),
-        isBeforeStart: appointmentStartTime < trailerStartTime,
-        isAfterEnd: appointmentStartTime > trailerEndTime
-      });
-      
-      if (appointmentStartTime < trailerStartTime || appointmentStartTime > trailerEndTime) {
-        console.log('Time slot is outside the trailer\'s operating hours');
-        setError('Selected time slot is outside the trailer\'s operating hours');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      // Check if the time slot is already booked
-      const appointmentsQuery = query(
-        collection(db, 'appointments'),
-        where('date', '==', Timestamp.fromDate(selectedDate as Date)),
-        where('stallId', '==', slot.stallId),
-        where('startTime', '==', slot.time),
-        where('status', '==', 'scheduled')
-      );
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      
-      if (!appointmentsSnapshot.empty) {
-        setError('Selected time slot is already booked');
-        setSelectedTimeSlot(null);
-        return;
-      }
-      
-      // If we get here, the time slot is valid
-      console.log('Time slot is valid:', slot);
-    } catch (error) {
-      console.error('Error validating time slot:', error);
-      setError('An error occurred while validating the time slot');
-      setSelectedTimeSlot(null);
-    } finally {
-      setIsValidating(false);
+    if (!selectedDate || !userCompany) return false;
+
+    console.log('Validating time slot:', timeSlot);
+    console.log('Selected date for validation:', selectedDate);
+
+    // Get stall data
+    const stallDoc = await getDoc(doc(db, 'stalls', timeSlot.stallId));
+    if (!stallDoc.exists()) {
+      console.error('Stall not found');
+      return false;
     }
+
+    const stall = stallDoc.data() as Stall;
+    console.log('Stall data:', stall);
+
+    // Check if stall is available
+    if (stall.status !== 'available') {
+      console.log('Stall is not available');
+      return false;
+    }
+
+    // Check if stall belongs to the user's company
+    if (stall.companyId !== userCompany.id) {
+      console.log('Stall does not belong to user company');
+      return false;
+    }
+
+    // Check if the selected date is today or in the future
+    const today = new Date();
+    today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+
+    const selectedDateNoon = new Date(selectedDate);
+    selectedDateNoon.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+
+    console.log('Date comparison:', {
+      today: today.toISOString(),
+      selectedDate: selectedDateNoon.toISOString(),
+      isSameDay: isSameDay(today, selectedDateNoon)
+    });
+
+    if (selectedDateNoon < today && !isSameDay(today, selectedDateNoon)) {
+      console.log('Selected date is in the past');
+      return false;
+    }
+
+    // Get trailer data
+    const trailerDoc = await getDoc(doc(db, 'trailers', timeSlot.trailerId));
+    if (!trailerDoc.exists()) {
+      console.error('Trailer not found');
+      return false;
+    }
+
+    const trailer = trailerDoc.data() as Trailer;
+    console.log('Trailer data:', trailer);
+
+    // Check if stall belongs to the selected trailer
+    if (stall.trailerGroup !== timeSlot.trailerId) {
+      console.log('Stall does not belong to selected trailer');
+      console.log('Stall trailer group:', stall.trailerGroup, 'vs selected trailer ID:', timeSlot.trailerId);
+      return false;
+    }
+
+    // Parse the time
+    const [time, period] = timeSlot.time.split(' ');
+    const [hours, minutes] = time.split(':').map(Number);
+    const parsedTime = {
+      hour: period === 'PM' && hours !== 12 ? hours + 12 : hours,
+      minute: minutes,
+      period,
+      original: timeSlot.time
+    };
+    console.log('Parsed time:', parsedTime);
+
+    // Create Date objects for comparison
+    const appointmentStartTime = new Date(selectedDate);
+    appointmentStartTime.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+
+    const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
+    const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
+
+    const trailerStartTime = new Date(selectedDate);
+    trailerStartTime.setHours(startHour, startMinute, 0, 0);
+
+    const trailerEndTime = new Date(selectedDate);
+    trailerEndTime.setHours(endHour, endMinute, 0, 0);
+
+    console.log('Time comparison:', {
+      appointmentStartTime: appointmentStartTime.toLocaleTimeString(),
+      trailerStartTime: trailerStartTime.toLocaleTimeString(),
+      trailerEndTime: trailerEndTime.toLocaleTimeString(),
+      isBeforeStart: appointmentStartTime < trailerStartTime,
+      isAfterEnd: appointmentStartTime > trailerEndTime
+    });
+
+    // Check if the appointment time is within the trailer's operating hours
+    if (appointmentStartTime < trailerStartTime || appointmentStartTime > trailerEndTime) {
+      console.log('Appointment time is outside trailer operating hours');
+      return false;
+    }
+
+    // Check for existing bookings
+    const existingBookings = await getExistingBookings(
+      timeSlot.stallId,
+      selectedDate,
+      timeSlot.time,
+      timeSlot.duration,
+      timeSlot.bufferTime
+    );
+
+    if (existingBookings.length > 0) {
+      console.log('Time slot conflicts with existing bookings');
+      return false;
+    }
+
+    console.log('Time slot is valid:', timeSlot);
+    return true;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -536,7 +577,11 @@ function BookingForm({
                   if (e.target.value) {
                     // Parse the date string directly to avoid timezone issues
                     const [year, month, day] = e.target.value.split('-').map(Number);
+                    // Create a date object with the local timezone
                     const date = new Date(year, month - 1, day);
+                    // Set the time to noon to avoid any timezone issues
+                    date.setHours(12, 0, 0, 0);
+                    console.log('Selected date:', date);
                     setSelectedDate(date);
                   } else {
                     setSelectedDate(null);
@@ -547,7 +592,12 @@ function BookingForm({
               />
               <button
                 type="button"
-                onClick={() => setSelectedDate(new Date())}
+                onClick={() => {
+                  const today = new Date();
+                  // Set the time to noon to avoid any timezone issues
+                  today.setHours(12, 0, 0, 0);
+                  setSelectedDate(today);
+                }}
                 className="px-3 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] transition-colors"
                 title="Set to today"
               >
@@ -710,7 +760,7 @@ export default function UserDashboardPage() {
             const appointmentsQuery = query(
               collection(db, 'appointments'),
               where('userId', '==', user.id),
-              where('status', 'in', ['scheduled', 'in_progress'])
+              where('status', 'in', ['scheduled', 'in_progress', 'completed', 'missed', 'cancelled'])
             );
             const appointmentsSnapshot = await getDocs(appointmentsQuery);
             const appointmentsData = await Promise.all(appointmentsSnapshot.docs.map(async (doc) => {
@@ -725,9 +775,32 @@ export default function UserDashboardPage() {
               const trailer = trailerDoc.empty ? null : { id: trailerDoc.docs[0].id, ...trailerDoc.docs[0].data() } as Trailer;
               
               // Convert Firestore Timestamp to Date
-              const date = appointmentData.date instanceof Timestamp 
-                ? appointmentData.date.toDate() 
+              const firestoreDate = appointmentData.date instanceof Timestamp 
+                ? appointmentData.date.toDate()
                 : new Date(appointmentData.date);
+              
+              console.log('Date conversion:', {
+                original: appointmentData.date,
+                firestoreDate: firestoreDate.toISOString(),
+                localDate: firestoreDate.toLocaleDateString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+              });
+
+              // Create a new date object preserving the local date
+              const date = new Date(
+                firestoreDate.getFullYear(),
+                firestoreDate.getMonth(),
+                firestoreDate.getDate(),
+                12, // Set to noon to avoid any timezone issues
+                0,
+                0,
+                0
+              );
+              
+              console.log('Final date:', {
+                date: date.toISOString(),
+                localDate: date.toLocaleDateString()
+              });
               
               return {
                 id: doc.id,
@@ -767,7 +840,9 @@ export default function UserDashboardPage() {
         bufferTime: number;
       }[] = [];
 
+      // Format the selected date for comparison
       const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+      console.log('Calculating slots for date:', selectedDateStr);
 
       // Get all available stalls for the selected service type
       const availableStalls = companyStalls.filter(stall => 
@@ -793,11 +868,17 @@ export default function UserDashboardPage() {
         const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
 
         // Create Date objects for start and end times
+        // Use a new Date object to avoid modifying the original
         const startTime = new Date(selectedDate);
         startTime.setHours(startHour, startMinute, 0, 0);
 
         const endTime = new Date(selectedDate);
         endTime.setHours(endHour, endMinute, 0, 0);
+
+        console.log('Trailer operating hours:', {
+          startTime: startTime.toLocaleTimeString(),
+          endTime: endTime.toLocaleTimeString()
+        });
 
         // Get stalls for this trailer
         const trailerStalls = availableStalls.filter(stall => stall.trailerGroup === trailer.id);
@@ -860,41 +941,85 @@ export default function UserDashboardPage() {
     calculateAvailableSlots();
   }, [selectedDate, selectedServiceType, userCompany, companyStalls, companyTrailers, appointments, userLocation]);
 
+  // Modify the appointment fetching logic
   const fetchAppointments = async () => {
+    if (!currentUser?.id) return;
+    
     try {
-      if (!currentUser?.id) return;
-
-      const appointmentsQuery = query(
+      // Fetch current appointments
+      const currentQuery = query(
         collection(db, 'appointments'),
         where('userId', '==', currentUser.id),
-        where('status', '==', 'scheduled')
+        where('status', 'in', ['scheduled', 'in_progress'] as AppointmentStatus[])
       );
-
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      const appointments = await Promise.all(appointmentsSnapshot.docs.map(async docSnapshot => {
+      
+      // Fetch historical appointments if viewing past tab
+      const historyQuery = activeTab === 'past' ? query(
+        collection(db, 'appointment_history'),
+        where('userId', '==', currentUser.id)
+      ) : null;
+      
+      const [currentSnapshot, historySnapshot] = await Promise.all([
+        getDocs(currentQuery),
+        historyQuery ? getDocs(historyQuery) : null
+      ]);
+      
+      // Process current appointments
+      const currentAppointments = await Promise.all(currentSnapshot.docs.map(async docSnapshot => {
         const data = docSnapshot.data();
-        const userDoc = await getDoc(doc(db, 'users', data.userId));
-        const stallDoc = await getDoc(doc(db, 'stalls', data.stallId));
-        const trailerDoc = await getDoc(doc(db, 'trailers', data.trailerId));
-
+        const [stallDoc, trailerDoc] = await Promise.all([
+          getDoc(doc(db, 'stalls', data.stallId as string)),
+          getDoc(doc(db, 'trailers', data.trailerId as string))
+        ]);
+        
         return {
           id: docSnapshot.id,
           ...data,
           date: data.date.toDate(),
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-          user: userDoc.data() as User,
-          stall: stallDoc.data() as Stall,
-          trailer: trailerDoc.data() as Trailer
+          stall: stallDoc.exists() ? stallDoc.data() as Stall : null,
+          trailer: trailerDoc.exists() ? trailerDoc.data() as Trailer : null,
+          user: currentUser
         } as AppointmentWithDetails;
       }));
-
-      setAppointments(appointments);
+      
+      // Process historical appointments if needed
+      const historicalAppointments = historySnapshot ? await Promise.all(
+        historySnapshot.docs.map(async docSnapshot => {
+          const data = docSnapshot.data();
+          const [stallDoc, trailerDoc] = await Promise.all([
+            getDoc(doc(db, 'stalls', data.stallId as string)),
+            getDoc(doc(db, 'trailers', data.trailerId as string))
+          ]);
+          
+          return {
+            id: docSnapshot.id,
+            ...data,
+            date: data.date.toDate(),
+            stall: stallDoc.exists() ? stallDoc.data() as Stall : null,
+            trailer: trailerDoc.exists() ? trailerDoc.data() as Trailer : null,
+            user: currentUser
+          } as AppointmentWithDetails;
+        })
+      ) : [];
+      
+      // Combine and set appointments based on active tab
+      const allAppointments = activeTab === 'upcoming'
+        ? currentAppointments
+        : historicalAppointments;
+      
+      setAppointments(allAppointments);
     } catch (error) {
       console.error('Error fetching appointments:', error);
       toast.error('Failed to fetch appointments');
     }
   };
+
+  // Update the useEffect to use the new fetch function
+  useEffect(() => {
+    if (!authLoading) {
+      fetchAppointments();
+    }
+  }, [user, authLoading, activeTab]);
 
   const handleBookAppointment = async (appointmentData: Partial<Appointment>) => {
     if (!user || !userCompany) return;
@@ -907,13 +1032,19 @@ export default function UserDashboardPage() {
         return;
       }
       
+      // Create a new date object with the correct local timezone
+      const appointmentDate = new Date(appointmentData.date as Date);
+      
+      // Set the time to noon to avoid timezone issues
+      appointmentDate.setHours(12, 0, 0, 0);
+      
       // Create appointment object
       const appointment: Omit<Appointment, 'id'> = {
         userId: user.id,
         companyId: userCompany.id,
         stallId: appointmentData.stallId as string,
         trailerId: appointmentData.trailerId as string,
-        date: appointmentData.date as Date,
+        date: appointmentDate,
         startTime: appointmentData.startTime as string,
         endTime: appointmentData.endTime as string,
         status: 'scheduled',
@@ -923,11 +1054,16 @@ export default function UserDashboardPage() {
       };
       
       console.log('Creating appointment with data:', appointment);
+      console.log('Appointment date before Firestore:', appointmentDate);
+      console.log('Appointment date ISO string:', appointmentDate.toISOString());
+      
+      // Create Timestamp directly from date components to avoid timezone issues
+      const timestamp = Timestamp.fromMillis(appointmentDate.getTime());
       
       // Add appointment to Firestore
       const docRef = await addDoc(collection(db, 'appointments'), {
         ...appointment,
-        date: Timestamp.fromDate(appointment.date),
+        date: timestamp,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
@@ -959,14 +1095,8 @@ export default function UserDashboardPage() {
           createdAt: user.createdAt,
           updatedAt: user.updatedAt
         },
-        stall: {
-          ...stall,
-          id: stallDoc.id
-        },
-        trailer: {
-          ...trailer,
-          id: trailerDoc.id
-        }
+        stall: stallDoc.exists() ? stallDoc.data() as Stall : null,
+        trailer: trailerDoc.exists() ? trailerDoc.data() as Trailer : null
       };
       
       // Update appointments state
@@ -1075,6 +1205,35 @@ export default function UserDashboardPage() {
     }
   };
 
+  const handleCompleteAppointment = async (appointmentId: string) => {
+    try {
+      // Get the appointment document reference
+      const appointmentRef = doc(db, 'appointments', appointmentId);
+      const appointmentDoc = await getDoc(appointmentRef);
+      
+      if (!appointmentDoc.exists()) {
+        toast.error('Appointment not found');
+        return;
+      }
+      
+      const appointmentData = appointmentDoc.data();
+      
+      // Update the appointment status to completed
+      await updateDoc(appointmentRef, {
+        status: 'completed',
+        updatedAt: Timestamp.now()
+      });
+      
+      // Update local state
+      setAppointments(prev => prev.filter(app => app.id !== appointmentId));
+      
+      toast.success('Appointment marked as completed');
+    } catch (error) {
+      console.error('Error completing appointment:', error);
+      toast.error('Failed to complete appointment');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#1e1b1b] flex items-center justify-center">
@@ -1088,16 +1247,88 @@ export default function UserDashboardPage() {
 
   // Filter appointments based on active tab
   const filteredAppointments = appointments.filter(appointment => {
+    // Create dates set to noon to avoid timezone issues
     const appointmentDate = new Date(appointment.date);
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    
+    // Set both dates to noon
+    appointmentDate.setHours(12, 0, 0, 0);
+    today.setHours(12, 0, 0, 0);
+    
+    console.log('Filtering appointment:', {
+      tab: activeTab,
+      appointmentDate: appointmentDate.toLocaleDateString(),
+      today: today.toLocaleDateString(),
+      isPast: appointmentDate < today,
+      isFuture: appointmentDate >= today
+    });
     
     if (activeTab === 'upcoming') {
+      // Show today's appointments in upcoming
       return appointmentDate >= today;
     } else {
+      // Past tab should show appointments before today
       return appointmentDate < today;
     }
   });
+
+  // Log filtered results
+  console.log('Filtered appointments:', {
+    activeTab,
+    totalAppointments: appointments.length,
+    filteredCount: filteredAppointments.length
+  });
+
+  // Group appointments by date
+  const groupedAppointments = filteredAppointments.reduce((groups, appointment) => {
+    // Get the date in local timezone using the original date components
+    const appointmentDate = new Date(appointment.date);
+    const localDate = new Date(
+      appointmentDate.getFullYear(),
+      appointmentDate.getMonth(),
+      appointmentDate.getDate(),
+      12, // Set to noon to avoid timezone issues
+      0,
+      0,
+      0
+    );
+    
+    console.log('Grouping appointment:', {
+      originalDate: appointment.date,
+      appointmentDate: appointmentDate.toISOString(),
+      localDate: localDate.toLocaleDateString(),
+      formattedLocalDate: format(localDate, 'yyyy-MM-dd')
+    });
+    
+    const date = format(localDate, 'yyyy-MM-dd');
+    
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(appointment);
+    return groups;
+  }, {} as Record<string, AppointmentWithDetails[]>);
+
+  // Sort dates in ascending order for upcoming appointments, descending for past
+  const sortedDates = Object.keys(groupedAppointments).sort((a, b) => {
+    if (activeTab === 'upcoming') {
+      return parseISO(a).getTime() - parseISO(b).getTime();
+    } else {
+      return parseISO(b).getTime() - parseISO(a).getTime();
+    }
+  });
+
+  // Function to open Google Maps with trailer location
+  const openGoogleMaps = (location: string) => {
+    if (!location) return;
+    
+    // Format the location for Google Maps URL
+    const formattedLocation = encodeURIComponent(location);
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${formattedLocation}`;
+    
+    // Open in a new tab
+    window.open(mapsUrl, '_blank');
+  };
 
   return (
     <div className="min-h-screen bg-[#1e1b1b]">
@@ -1155,48 +1386,97 @@ export default function UserDashboardPage() {
             </nav>
           </div>
           
-          {filteredAppointments.length > 0 ? (
-            <div className="space-y-3 sm:space-y-4">
-              {filteredAppointments.map((appointment, index) => (
-                <div 
-                  key={appointment.id} 
-                  className="border border-[#3e2802] rounded-xl p-3 sm:p-5 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1 bg-[#3e2802]"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:justify-between sm:items-start md:items-center">
-                    <div className="mb-2 sm:mb-0">
-                      <div className="flex items-center mb-1 sm:mb-2">
-                        <h3 className="text-base sm:text-lg font-medium text-[#ffffff]">
-                          {appointment.stall?.serviceType 
-                            ? appointment.stall.serviceType.charAt(0).toUpperCase() + appointment.stall.serviceType.slice(1)
-                            : 'Service Type Unavailable'}
-                        </h3>
+          {sortedDates.length > 0 ? (
+            <div className="space-y-6">
+              {sortedDates.map((date) => (
+                <div key={date} className="border border-[#3e2802] rounded-xl p-3 sm:p-5 bg-[#3e2802]">
+                  <h3 className="text-lg sm:text-xl font-bold text-[#ffffff] mb-3">
+                    {format(parseISO(date), 'MMMM d, yyyy')}
+                  </h3>
+                  <div className="space-y-3">
+                    {groupedAppointments[date].map((appointment) => (
+                      <div 
+                        key={appointment.id} 
+                        className="border border-[#ffa300] rounded-lg p-3 bg-[#2a1c01] hover:shadow-md transition-all duration-300"
+                      >
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-base font-medium text-[#ffa300]">
+                              {appointment.stall?.serviceType 
+                                ? appointment.stall.serviceType.charAt(0).toUpperCase() + appointment.stall.serviceType.slice(1)
+                                : 'Service Type Unavailable'}
+                            </h4>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              (() => {
+                                switch(appointment.status as AppointmentStatus) {
+                                  case 'scheduled':
+                                    return 'bg-blue-100 text-blue-800';
+                                  case 'in_progress':
+                                    return 'bg-yellow-100 text-yellow-800';
+                                  case 'completed':
+                                    return 'bg-green-100 text-green-800';
+                                  case 'missed':
+                                    return 'bg-red-100 text-red-800';
+                                  case 'cancelled':
+                                    return 'bg-gray-100 text-gray-800';
+                                  default:
+                                    return 'bg-gray-100 text-gray-800';
+                                }
+                              })()
+                            }`}>
+                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1).replace('_', ' ')}
+                            </span>
+                          </div>
+                          <div className="flex items-center text-sm text-[#ffffff]">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {appointment.startTime}
+                          </div>
+                          <div className="flex items-center text-sm text-[#ffffff]">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {appointment.trailer?.location || 'Location Unavailable'}
+                          </div>
+                          <div className="flex justify-between items-center mt-2">
+                            <button
+                              onClick={() => openGoogleMaps(appointment.trailer?.location || '')}
+                              className="px-2 py-1 bg-[#ffa300] text-[#3e2802] rounded-lg hover:bg-[#ffb733] transition-colors duration-300 flex items-center text-xs"
+                              disabled={!appointment.trailer?.location}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                              </svg>
+                              Take me there
+                            </button>
+                            {appointment.status === 'scheduled' && (
+                              <button
+                                onClick={() => handleCancelAppointment(appointment.id)}
+                                className="px-2 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors duration-300 flex items-center text-xs"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Cancel
+                              </button>
+                            )}
+                            {appointment.status === 'in_progress' && (
+                              <button
+                                onClick={() => handleCompleteAppointment(appointment.id)}
+                                className="px-2 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors duration-300 flex items-center text-xs"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Complete
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center text-xs sm:text-sm text-[#ffffff] mb-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {appointment.date instanceof Date 
-                          ? format(appointment.date, 'MMMM d, yyyy')
-                          : 'Date Unavailable'} at {appointment.startTime}
-                      </div>
-                      <div className="flex items-center text-xs sm:text-sm text-[#ffffff]">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {appointment.trailer?.location || 'Location Unavailable'}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleCancelAppointment(appointment.id)}
-                      className="px-2 py-1 sm:px-3 sm:py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors duration-300 flex items-center text-xs sm:text-sm"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      Cancel
-                    </button>
+                    ))}
                   </div>
                 </div>
               ))}
