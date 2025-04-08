@@ -2,9 +2,15 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, query, where, doc, getDoc, onSnapshot, updateDoc, Timestamp, addDoc, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, onSnapshot, updateDoc, Timestamp, addDoc, orderBy, limit, writeBatch, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db, auth, storage } from '@/lib/firebase';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
+import { User } from '@/types/user';
+import { ServiceType } from '@/types/stall';
+import { Stall } from '@/types/stall';
+import { Trailer } from '@/types/trailer';
+import { AppointmentWithDetails } from '@/types/appointment';
 import { 
   ArrowLeftIcon, 
   CheckCircleIcon, 
@@ -14,26 +20,14 @@ import {
   UserPlusIcon,
   UserIcon,
   PhotoIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/app/components/AuthContext';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { format } from 'date-fns';
-import { ServiceType } from '@/types/stall';
-import { Stall } from '@/types/stall';
-
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'admin' | 'user';
-  companyId: string;
-  profilePhoto?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  displayName?: string;
-}
+import { format, parseISO } from 'date-fns';
+import { useSearchParams } from 'next/navigation';
 
 interface Company {
   id: string;
@@ -96,6 +90,7 @@ interface StallGridProps {
   endTime: string;
   selectedService: 'shower' | 'laundry';
   selectedTrailerId: string | null;
+  selectedTimeSlot: {time: string, stallId: string, trailerId: string} | null;
   updateAppointmentStatus: (appointmentId: string, newStatus: 'scheduled' | 'in-progress' | 'completed' | 'cancelled') => Promise<void>;
   onTimeSlotSelect: (time: string, stallId: string, trailerId: string) => void;
 }
@@ -151,7 +146,18 @@ function findClosestTimeSlot(timeSlots: string[], currentTime: string): number {
   return closestIndex;
 }
 
-const StallGrid: React.FC<StallGridProps> = ({ stalls, trailers, appointments, startTime, endTime, selectedService, selectedTrailerId, updateAppointmentStatus, onTimeSlotSelect }) => {
+const StallGrid: React.FC<StallGridProps> = ({ 
+  stalls, 
+  trailers, 
+  appointments, 
+  startTime, 
+  endTime, 
+  selectedService, 
+  selectedTrailerId,
+  selectedTimeSlot,
+  updateAppointmentStatus, 
+  onTimeSlotSelect 
+}) => {
   const [selectedGridAppointment, setSelectedGridAppointment] = useState<Appointment | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const timeSlotsRef = useRef<HTMLDivElement>(null);
@@ -203,17 +209,16 @@ const StallGrid: React.FC<StallGridProps> = ({ stalls, trailers, appointments, s
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'in-use':
-      case 'in-progress':
-        return 'bg-yellow-500';
-      case 'needs-cleaning':
-        return 'bg-orange-500';
-      case 'out-of-order':
-        return 'bg-red-500';
       case 'scheduled':
-        return 'bg-blue-500';
+        return 'bg-blue-500 text-white';
+      case 'in-progress':
+        return 'bg-yellow-500 text-white';
+      case 'completed':
+        return 'bg-green-500 text-white';
+      case 'cancelled':
+        return 'bg-black text-white';
       default:
-        return 'bg-white';
+        return 'bg-gray-200 text-gray-800';
     }
   };
 
@@ -276,28 +281,27 @@ const StallGrid: React.FC<StallGridProps> = ({ stalls, trailers, appointments, s
 
   return (
     <>
-      <div className="flex flex-col border border-black rounded-xl bg-white overflow-hidden" ref={gridRef}>
+      <div className="flex flex-col border border-[#ffa300] rounded-xl bg-[#1e1b1b] overflow-hidden" ref={gridRef}>
         {/* Header - Trailers and Stalls - Add padding right to account for scrollbar */}
-        <div className="flex border-b border-black pr-[17px]">
-          <div className="w-24 flex-shrink-0 bg-white text-black font-bold p-2 text-center border-r border-black">Time</div>
+        <div className="flex border-b border-[#ffa300] pr-[17px]">
+          <div className="w-24 flex-shrink-0 bg-[#1e1b1b] text-white font-bold p-2 text-center border-r border-[#ffa300]">Time</div>
           {filteredTrailers.map(trailer => (
             <div key={trailer.id} className="flex-1">
-              <div className="text-center font-bold p-2 bg-white text-black border-b border-black">{trailer.name}</div>
+              <div className="text-center font-bold p-2 bg-[#1e1b1b] text-white border-b border-[#ffa300]">{trailer.name}</div>
               <div className="flex">
                 {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                   .map(stall => {
                     const currentStatus = getCurrentStallStatus(stall.id, stalls, appointments);
                     const statusColor = getStatusColor(currentStatus.status);
-                    const textColor = currentStatus.status === 'available' ? 'text-black' : 'text-white';
                     
                     return (
                       <div 
                         key={stall.id} 
-                        className={`flex-1 text-center p-2 border-r border-black ${statusColor} ${textColor}`}
+                        className={`flex-1 text-center p-2 border-r border-[#ffa300] bg-[#1e1b1b] text-white`}
                       >
                         <div className="font-medium">{stall.name}</div>
                         {currentStatus.userName && (
-                          <div className="text-xs mt-1 opacity-75">
+                          <div className="text-xs mt-1 text-white opacity-75">
                             {currentStatus.userName}
                           </div>
                         )}
@@ -314,10 +318,10 @@ const StallGrid: React.FC<StallGridProps> = ({ stalls, trailers, appointments, s
           {timeSlots.map((time, index) => (
             <div 
               key={time} 
-              className="flex border-b border-black relative"
+              className="flex border-b border-[#ffa300] relative"
               data-time-index={index}
             >
-              <div className="w-24 flex-shrink-0 p-2 text-sm font-medium text-black bg-white border-r border-black sticky left-0 z-10">
+              <div className="w-24 flex-shrink-0 p-2 text-sm font-medium text-white bg-[#1e1b1b] border-r border-[#ffa300] sticky left-0 z-10">
                 {formatTimeForDisplay(time)}
               </div>
               {filteredTrailers.map(trailer => (
@@ -331,7 +335,13 @@ const StallGrid: React.FC<StallGridProps> = ({ stalls, trailers, appointments, s
                       return (
                         <div 
                           key={`${stall.id}-${time}`} 
-                          className={`flex-1 h-12 border-r border-black ${showColor ? getStatusColor(stallStatus.status) : 'bg-white'} relative group cursor-pointer`}
+                          className={`flex-1 h-12 border-r border-[#ffa300] ${
+                            selectedTimeSlot && 
+                            selectedTimeSlot.time === time && 
+                            selectedTimeSlot.stallId === stall.id
+                              ? 'ring-2 ring-[#ffa300] ring-offset-2 ring-offset-[#1e1b1b]'
+                              : ''
+                          } ${showColor ? getStatusColor(stallStatus.status) : 'bg-[#1e1b1b]'} relative group cursor-pointer`}
                           onClick={() => handleTimeSlotClick(time, stall.id, trailer.id, appointment)}
                         >
                           {stallStatus.userName && (
@@ -1145,54 +1155,13 @@ function AppointmentBookingModal({
         )}
 
         <div className="space-y-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-[#ffa300] mb-2">
-              Service Type *
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedService('shower')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedService === 'shower'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Shower
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedService('laundry')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedService === 'laundry'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Laundry
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedService('haircut')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedService === 'haircut'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Haircut
-              </button>
-            </div>
-            {!selectedService && (
-              <p className="mt-2 text-sm text-red-600">Please select a service type</p>
-            )}
-          </div>
-
           {selectedTimeSlot && (
             <div className="bg-[#3e2802] p-4 rounded-lg">
               <h3 className="text-[#ffa300] font-medium mb-2">Selected Time Slot</h3>
               <p className="text-white">Time: {selectedTimeSlot.time}</p>
+              {stallData && (
+                <p className="text-white capitalize mt-1">Service: {stallData.serviceType}</p>
+              )}
             </div>
           )}
 
@@ -1441,6 +1410,226 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
   );
 };
 
+// Add function to check if appointment should be moved to history
+const shouldMoveToHistory = (appointment: AppointmentWithDetails): boolean => {
+  const now = new Date();
+  const appointmentDate = new Date(appointment.date);
+  appointmentDate.setHours(23, 59, 59, 999); // End of appointment day
+  
+  return (
+    // Past appointments
+    appointmentDate < now ||
+    // Completed or cancelled appointments
+    appointment.status === 'completed' ||
+    appointment.status === 'cancelled' ||
+    // Missed appointments (past scheduled appointments)
+    (appointment.status === 'scheduled' && appointmentDate < now)
+  );
+};
+
+// Add function to move appointments to history
+const moveAppointmentsToHistory = async (appointments: AppointmentWithDetails[]) => {
+  const batch = writeBatch(db);
+  
+  for (const appointment of appointments) {
+    // Determine the reason for moving to history
+    let reason = appointment.status === 'completed' ? 'completed' :
+                 appointment.status === 'cancelled' ? 'cancelled' :
+                 appointment.status === 'scheduled' ? 'missed' :
+                 'past_date';
+
+    // Create new doc in history collection
+    const historyRef = doc(collection(db, 'appointment_history'));
+    
+    // Convert dates to Firestore Timestamps
+    const historicalData = {
+      ...appointment,
+      originalId: appointment.id,
+      status: appointment.status === 'scheduled' ? 'missed' : appointment.status,
+      movedToHistoryAt: Timestamp.now(),
+      reason,
+      // Convert Date objects to Timestamps
+      date: Timestamp.fromDate(new Date(appointment.date)),
+      createdAt: Timestamp.fromDate(new Date(appointment.createdAt)),
+      updatedAt: Timestamp.fromDate(new Date(appointment.updatedAt))
+    };
+    
+    // Remove the id from the data (it will be the document id)
+    const { id, ...dataWithoutId } = historicalData;
+    
+    batch.set(historyRef, dataWithoutId);
+    
+    // Delete from current appointments
+    const appointmentRef = doc(db, 'appointments', appointment.id);
+    batch.delete(appointmentRef);
+    
+    console.log('Moving appointment to history:', {
+      appointmentId: appointment.id,
+      newHistoryId: historyRef.id,
+      reason,
+      status: historicalData.status
+    });
+  }
+  
+  try {
+    await batch.commit();
+    console.log(`Successfully moved ${appointments.length} appointments to history`);
+  } catch (error) {
+    console.error('Error moving appointments to history:', error);
+    throw new Error('Failed to move appointments to history');
+  }
+};
+
+// Function to check and move past appointments to history
+const checkPastAppointments = async () => {
+  try {
+    // Get all scheduled appointments
+    const scheduledQuery = query(
+      collection(db, 'appointments'),
+      where('status', '==', 'scheduled')
+    );
+    
+    const scheduledSnapshot = await getDocs(scheduledQuery);
+    const now = new Date();
+    
+    // Filter for past appointments
+    const pastAppointments = await Promise.all(
+      scheduledSnapshot.docs.map(async docSnapshot => {
+        const data = docSnapshot.data();
+        const appointmentDate = data.date.toDate();
+        const endTime = data.endTime;
+        
+        // Parse end time
+        const [hours, minutes] = endTime.split(':')[0].split(' ')[0].split(':').map(Number);
+        const period = endTime.split(' ')[1];
+        const adjustedHours = period === 'PM' && hours !== 12 ? hours + 12 : hours;
+        
+        // Set appointment end time
+        appointmentDate.setHours(adjustedHours, minutes);
+        
+        // If appointment is in the past
+        if (appointmentDate < now) {
+          // Get related data
+          const [userDoc, stallDoc, trailerDoc] = await Promise.all([
+            getDoc(doc(db, 'users', data.userId)),
+            getDoc(doc(db, 'stalls', data.stallId)),
+            getDoc(doc(db, 'trailers', data.trailerId))
+          ]);
+          
+          return {
+            id: docSnapshot.id,
+            ...data,
+            date: appointmentDate,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+            user: userDoc.data() as User,
+            stall: stallDoc.data() as Stall,
+            trailer: trailerDoc.data() as Trailer
+          } as AppointmentWithDetails;
+        }
+        return null;
+      })
+    );
+    
+    // Filter out null values and move to history
+    const appointmentsToMove = pastAppointments.filter((app): app is AppointmentWithDetails => app !== null);
+    if (appointmentsToMove.length > 0) {
+      await moveAppointmentsToHistory(appointmentsToMove);
+      // Refresh the appointments list
+      fetchAppointments();
+    }
+  } catch (error) {
+    console.error('Error checking past appointments:', error);
+    toast.error('Failed to process past appointments');
+  }
+};
+
+// Add button to manually trigger check
+const AdminControls = () => {
+  const [isChecking, setIsChecking] = useState(false);
+  
+  const handleCheckPastAppointments = async () => {
+    setIsChecking(true);
+    try {
+      await checkPastAppointments();
+      toast.success('Successfully processed past appointments');
+    } catch (error) {
+      toast.error('Failed to process past appointments');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+  
+  return (
+    <div className="mb-6 p-4 bg-[#3e2802] rounded-lg">
+      <h2 className="text-lg font-semibold text-[#ffa300] mb-4">Admin Controls</h2>
+      <button
+        onClick={handleCheckPastAppointments}
+        disabled={isChecking}
+        className="px-4 py-2 bg-[#ffa300] text-[#3e2802] rounded-lg hover:bg-[#ffb733] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isChecking ? 'Processing...' : 'Process Past Appointments'}
+      </button>
+    </div>
+  );
+};
+
+const fetchAppointments = async () => {
+  try {
+    const appointmentsRef = collection(db, 'appointments');
+    const q = query(appointmentsRef, orderBy('date', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const appointments: AppointmentWithDetails[] = [];
+    
+    for (const docSnapshot of querySnapshot.docs) {
+      const appointmentData = docSnapshot.data();
+      const appointment: AppointmentWithDetails = {
+        id: docSnapshot.id,
+        ...appointmentData,
+        date: appointmentData.date.toDate(),
+        createdAt: appointmentData.createdAt.toDate(),
+        updatedAt: appointmentData.updatedAt.toDate(),
+      } as AppointmentWithDetails;
+      
+      // Fetch related user details
+      if (appointmentData.userId) {
+        const userRef = doc(db, 'users', appointmentData.userId);
+        const userSnapshot = await getDoc(userRef);
+        if (userSnapshot.exists()) {
+          appointment.user = userSnapshot.data() as User;
+        }
+      }
+      
+      // Fetch related stall details
+      if (appointmentData.stallId) {
+        const stallRef = doc(db, 'stalls', appointmentData.stallId);
+        const stallSnapshot = await getDoc(stallRef);
+        if (stallSnapshot.exists()) {
+          appointment.stall = stallSnapshot.data() as Stall;
+        }
+      }
+      
+      // Fetch related trailer details
+      if (appointmentData.trailerId) {
+        const trailerRef = doc(db, 'trailers', appointmentData.trailerId);
+        const trailerSnapshot = await getDoc(trailerRef);
+        if (trailerSnapshot.exists()) {
+          appointment.trailer = trailerSnapshot.data() as Trailer;
+        }
+      }
+      
+      appointments.push(appointment);
+    }
+    
+    return appointments;
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    toast.error('Failed to fetch appointments');
+    return [];
+  }
+};
+
 export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { user: authUser, loading: authLoading } = useAuth();
@@ -1465,7 +1654,38 @@ export default function AdminDashboardPage() {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<{time: string, stallId: string, trailerId: string} | null>(null);
   const [selectedTrailerId, setSelectedTrailerId] = useState<string | null>(null);
   const [showError, setShowError] = useState<string | null>(null);
-
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const searchParams = useSearchParams();
+  
+  // Get appointment ID and date from URL parameters
+  const appointmentId = searchParams.get('appointmentId');
+  const dateParam = searchParams.get('date');
+  
+  // Set the selected date from URL parameter if available
+  useEffect(() => {
+    if (dateParam) {
+      try {
+        const parsedDate = parseISO(dateParam);
+        setSelectedDate(parsedDate);
+        console.log('Setting date from URL parameter:', parsedDate);
+      } catch (error) {
+        console.error('Error parsing date from URL:', error);
+      }
+    }
+  }, [dateParam]);
+  
+  // Set the selected appointment from URL parameter if available
+  useEffect(() => {
+    if (appointmentId && todayAppointments.length > 0) {
+      const appointment = todayAppointments.find(a => a.id === appointmentId);
+      if (appointment) {
+        setSelectedAppointment(appointment);
+        setShowAppointmentDetails(true);
+        console.log('Setting appointment from URL parameter:', appointment);
+      }
+    }
+  }, [appointmentId, todayAppointments]);
+  
   // Fetch initial data
   useEffect(() => {
     const initializeData = async () => {
@@ -1532,32 +1752,180 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (currentUser) {
       console.log('Current user is set, fetching appointments for:', currentUser.companyId);
-      fetchTodayAppointments();
+      fetchAppointmentsForDate(selectedDate);
+    }
+  }, [currentUser, selectedDate]);
+  
+  // Separate useEffect for setting up real-time listeners
+  useEffect(() => {
+    if (currentUser) {
+      console.log('Setting up real-time listeners for date:', selectedDate.toISOString());
       setupRealtimeListeners();
     }
-  }, [currentUser]);
+  }, [currentUser, selectedDate]);
+  
+  // Function to fetch appointments for a specific date
+  const fetchAppointmentsForDate = async (date: Date) => {
+    try {
+      if (!currentUser?.companyId) {
+        console.error('No company ID available');
+        return [];
+      }
 
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      console.log('Fetching appointments for date:', date.toISOString());
+
+      const appointmentsRef = collection(db, 'appointments');
+      const q = query(
+        appointmentsRef,
+        where('companyId', '==', currentUser.companyId),
+        where('date', '>=', Timestamp.fromDate(startOfDay)),
+        where('date', '<=', Timestamp.fromDate(endOfDay))
+      );
+
+      const querySnapshot = await getDocs(q);
+      const appointments: Appointment[] = [];
+
+      // Get all users for this company to map IDs to names
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('companyId', '==', currentUser.companyId)
+      );
+      const usersSnapshot = await getDocs(usersQuery);
+      const usersMap = new Map();
+      
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        usersMap.set(doc.id, userData.firstName && userData.lastName 
+          ? `${userData.firstName} ${userData.lastName}` 
+          : userData.email || `User ${doc.id.substring(0, 4)}`);
+      });
+      
+      // Get all stalls for this company to map IDs to names
+      const stallsQuery = query(
+        collection(db, 'stalls'),
+        where('companyId', '==', currentUser.companyId)
+      );
+      const stallsSnapshot = await getDocs(stallsQuery);
+      const stallsMap = new Map();
+      
+      stallsSnapshot.forEach(doc => {
+        const stallData = doc.data();
+        stallsMap.set(doc.id, stallData.name || `Stall ${doc.id.substring(0, 4)}`);
+      });
+
+      for (const doc of querySnapshot.docs) {
+        const appointmentData = doc.data();
+        const stallName = stallsMap.get(appointmentData.stallId) || `Stall ${appointmentData.stallId.substring(0, 4)}`;
+        const userName = usersMap.get(appointmentData.userId) || `User ${appointmentData.userId.substring(0, 4)}`;
+        
+        const appointment: Appointment = {
+          id: doc.id,
+          userId: appointmentData.userId,
+          companyId: appointmentData.companyId,
+          serviceType: appointmentData.serviceType,
+          date: appointmentData.date.toDate(),
+          startTime: appointmentData.startTime,
+          endTime: appointmentData.endTime,
+          status: appointmentData.status,
+          stallId: appointmentData.stallId,
+          stallName: stallName,
+          userName: userName,
+          createdAt: appointmentData.createdAt.toDate(),
+          updatedAt: appointmentData.updatedAt.toDate()
+        };
+        appointments.push(appointment);
+      }
+
+      // Sort appointments by time
+      appointments.sort((a, b) => {
+        // Convert time strings to Date objects for proper comparison
+        const [hoursA, minutesA] = a.startTime.split(':').map(Number);
+        const [hoursB, minutesB] = b.startTime.split(':').map(Number);
+        
+        const timeA = new Date(date);
+        timeA.setHours(hoursA, minutesA, 0, 0);
+        
+        const timeB = new Date(date);
+        timeB.setHours(hoursB, minutesB, 0, 0);
+        
+        // Compare the Date objects
+        return timeA.getTime() - timeB.getTime();
+      });
+
+      console.log(`Found ${appointments.length} appointments for date ${date.toISOString()}`);
+      setTodayAppointments(appointments);
+      
+      // If there's a selected appointment, update it with the latest data
+      if (selectedAppointment) {
+        const updatedAppointment = appointments.find(a => a.id === selectedAppointment.id);
+        if (updatedAppointment) {
+          setSelectedAppointment(updatedAppointment);
+        }
+      }
+      
+      return appointments;
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      return [];
+    }
+  };
+
+  // Function to fetch today's appointments
+  const fetchTodayAppointments = async () => {
+    await fetchAppointmentsForDate(new Date());
+  };
+  
+  // Function to change the selected date
+  const handleDateChange = (newDate: Date) => {
+    setSelectedDate(newDate);
+  };
+  
+  // Function to navigate to previous day
+  const handlePrevDay = () => {
+    const prevDay = new Date(selectedDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    setSelectedDate(prevDay);
+  };
+  
+  // Function to navigate to next day
+  const handleNextDay = () => {
+    const nextDay = new Date(selectedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    setSelectedDate(nextDay);
+  };
+  
+  // Function to navigate to today
+  const handleToday = () => {
+    setSelectedDate(new Date());
+  };
+  
   const setupRealtimeListeners = () => {
     if (!currentUser?.companyId) return;
     
-    // Get today's date (start and end)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Get the selected date (start and end)
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
     
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
     
     console.log('Setting up real-time listeners for date range:', {
-      today: today.toISOString(),
-      tomorrow: tomorrow.toISOString()
+      startOfDay: startOfDay.toISOString(),
+      endOfDay: endOfDay.toISOString()
     });
     
     // Set up real-time listener for appointments
     const appointmentsQuery = query(
       collection(db, 'appointments'),
       where('companyId', '==', currentUser.companyId),
-      where('date', '>=', Timestamp.fromDate(today)),
-      where('date', '<', Timestamp.fromDate(tomorrow)),
+      where('date', '>=', Timestamp.fromDate(startOfDay)),
+      where('date', '<=', Timestamp.fromDate(endOfDay)),
       orderBy('startTime', 'asc')
     );
     
@@ -1620,14 +1988,13 @@ export default function AdminDashboardPage() {
       // Sort appointments by time
       appointments.sort((a, b) => {
         // Convert time strings to Date objects for proper comparison
-        const today = new Date();
         const [hoursA, minutesA] = a.startTime.split(':').map(Number);
         const [hoursB, minutesB] = b.startTime.split(':').map(Number);
         
-        const timeA = new Date(today);
+        const timeA = new Date(selectedDate);
         timeA.setHours(hoursA, minutesA, 0, 0);
         
-        const timeB = new Date(today);
+        const timeB = new Date(selectedDate);
         timeB.setHours(hoursB, minutesB, 0, 0);
         
         // Compare the Date objects
@@ -1676,162 +2043,6 @@ export default function AdminDashboardPage() {
       unsubscribeAppointments();
       unsubscribeNotifications();
     };
-  };
-
-  const fetchTodayAppointments = async () => {
-    try {
-      if (!currentUser) {
-        console.error('No current user found');
-        return;
-      }
-      
-      console.log('Current user:', currentUser);
-      console.log('Current company ID:', currentUser.companyId);
-      
-      // Get today's date (start and end)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      console.log('Fetching appointments for date range:', {
-        today: today.toISOString(),
-        tomorrow: tomorrow.toISOString(),
-        todayTimestamp: Timestamp.fromDate(today).toDate().toISOString(),
-        tomorrowTimestamp: Timestamp.fromDate(tomorrow).toDate().toISOString()
-      });
-      
-      // Query for today's appointments
-      const appointmentsQuery = query(
-        collection(db, 'appointments'),
-        where('companyId', '==', currentUser.companyId),
-        where('date', '>=', Timestamp.fromDate(today)),
-        where('date', '<', Timestamp.fromDate(tomorrow)),
-        orderBy('startTime', 'asc')
-      );
-      
-      console.log('Query parameters:', {
-        companyId: currentUser.companyId,
-        dateLowerBound: Timestamp.fromDate(today).toDate().toISOString(),
-        dateUpperBound: Timestamp.fromDate(tomorrow).toDate().toISOString()
-      });
-      
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      
-      console.log('Found appointments:', appointmentsSnapshot.size);
-      
-      // Log all appointments in the database for this company (for debugging)
-      const allAppointmentsQuery = query(
-        collection(db, 'appointments'),
-        where('companyId', '==', currentUser.companyId)
-      );
-      const allAppointmentsSnapshot = await getDocs(allAppointmentsQuery);
-      console.log('Total appointments for company:', allAppointmentsSnapshot.size);
-      
-      allAppointmentsSnapshot.forEach(doc => {
-        const data = doc.data();
-        console.log('All appointment:', {
-          id: doc.id,
-          date: data.date?.toDate?.()?.toISOString() || 'No date',
-          startTime: data.startTime,
-          endTime: data.endTime,
-          serviceType: data.serviceType,
-          status: data.status
-        });
-      });
-      
-      const appointments: Appointment[] = [];
-      
-      // Get all stalls for this company to map IDs to names
-      const stallsQuery = query(
-        collection(db, 'stalls'),
-        where('companyId', '==', currentUser.companyId)
-      );
-      const stallsSnapshot = await getDocs(stallsQuery);
-      const stallsMap = new Map();
-      
-      stallsSnapshot.forEach(doc => {
-        const stallData = doc.data();
-        stallsMap.set(doc.id, stallData.name || `Stall ${doc.id.substring(0, 4)}`);
-      });
-      
-      // Get all users for this company to map IDs to names
-      const usersQuery = query(
-        collection(db, 'users'),
-        where('companyId', '==', currentUser.companyId)
-      );
-      const usersSnapshot = await getDocs(usersQuery);
-      const usersMap = new Map();
-      
-      usersSnapshot.forEach(doc => {
-        const userData = doc.data();
-        usersMap.set(doc.id, userData.firstName && userData.lastName 
-          ? `${userData.firstName} ${userData.lastName}` 
-          : userData.email || `User ${doc.id.substring(0, 4)}`);
-      });
-      
-      appointmentsSnapshot.forEach(doc => {
-        const data = doc.data();
-        console.log('Processing appointment:', {
-          id: doc.id,
-          date: data.date?.toDate?.()?.toISOString() || 'No date',
-          startTime: data.startTime,
-          endTime: data.endTime,
-          serviceType: data.serviceType,
-          status: data.status
-        });
-        
-        const stallName = stallsMap.get(data.stallId) || `Stall ${data.stallId.substring(0, 4)}`;
-        const userName = usersMap.get(data.userId) || `User ${data.userId.substring(0, 4)}`;
-        
-        appointments.push({
-          id: doc.id,
-          userId: data.userId,
-          companyId: data.companyId,
-          serviceType: data.serviceType,
-          date: data.date.toDate(),
-          startTime: data.startTime,
-          endTime: data.endTime,
-          status: data.status,
-          stallId: data.stallId,
-          stallName: stallName,
-          userName: userName,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate()
-        });
-      });
-      
-      // Sort appointments by time
-      appointments.sort((a, b) => {
-        // Convert time strings to Date objects for proper comparison
-        const today = new Date();
-        const [hoursA, minutesA] = a.startTime.split(':').map(Number);
-        const [hoursB, minutesB] = b.startTime.split(':').map(Number);
-        
-        const timeA = new Date(today);
-        timeA.setHours(hoursA, minutesA, 0, 0);
-        
-        const timeB = new Date(today);
-        timeB.setHours(hoursB, minutesB, 0, 0);
-        
-        // Compare the Date objects
-        return timeA.getTime() - timeB.getTime();
-      });
-      
-      console.log('Final sorted appointments:', appointments.map(a => ({
-        id: a.id,
-        date: a.date.toISOString(),
-        startTime: a.startTime,
-        endTime: a.endTime,
-        serviceType: a.serviceType,
-        status: a.status
-      })));
-      
-      setTodayAppointments(appointments);
-    } catch (error) {
-      console.error('Error fetching today\'s appointments:', error);
-    }
   };
 
   const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'in-progress' | 'completed' | 'cancelled') => {
@@ -2004,6 +2215,18 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Add automatic check for past appointments
+  useEffect(() => {
+    // Run check immediately
+    checkPastAppointments();
+    
+    // Set up interval to check every hour
+    const interval = setInterval(checkPastAppointments, 60 * 60 * 1000);
+    
+    // Clean up interval on unmount
+    return () => clearInterval(interval);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
@@ -2054,10 +2277,37 @@ export default function AdminDashboardPage() {
       )}
 
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-[#ffa300] mb-6">Admin Dashboard</h1>
-
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-[#ffa300]">Admin Dashboard</h1>
+          
+          {/* Date Navigation */}
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={handlePrevDay}
+              className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+            >
+              <ChevronLeftIcon className="h-5 w-5" />
+            </button>
+            <span className="text-[#ffa300] font-medium">
+              {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+            </span>
+            <button 
+              onClick={handleNextDay}
+              className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+            >
+              <ChevronRightIcon className="h-5 w-5" />
+            </button>
+            <button 
+              onClick={handleToday}
+              className="px-3 py-1 rounded-md bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200 text-sm"
+            >
+              Today
+            </button>
+          </div>
+        </div>
+        
         <div className="flex gap-6">
-          {/* Left side - Today's Appointments - Make narrower */}
+          {/* Left side - Appointments for selected date */}
           <div className="w-1/4 min-w-[300px] bg-[#1e1b1b]">
             <button
               onClick={() => setShowUserSelectionModal(true)}
@@ -2067,7 +2317,7 @@ export default function AdminDashboardPage() {
               <span>Create Appointment</span>
             </button>
 
-            <h2 className="text-xl font-bold mb-4 text-[#ffa300]">Today's Appointments</h2>
+            <h2 className="text-xl font-bold mb-4 text-[#ffa300]">Appointments for {format(selectedDate, 'MMMM d, yyyy')}</h2>
             <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
               {todayAppointments.map((appointment) => (
                 <div key={appointment.id}>
@@ -2182,7 +2432,7 @@ export default function AdminDashboardPage() {
               ))}
             </div>
           </div>
-
+          
           {/* Right side - Service Toggle and Stall Grid - Make wider */}
           <div className="flex-1 bg-[#1e1b1b] min-w-0">
             {/* Service Type Toggle Buttons */}
@@ -2259,6 +2509,7 @@ export default function AdminDashboardPage() {
               endTime={companyEndTime}
               selectedService={selectedService}
               selectedTrailerId={selectedTrailerId}
+              selectedTimeSlot={selectedTimeSlot}
               updateAppointmentStatus={updateAppointmentStatus}
               onTimeSlotSelect={handleTimeSlotSelect}
             />
