@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
-import { User } from './user';
-import { Stall } from './stall';
-import { Trailer } from './trailer';
+import { User } from '@/types/user';
+import { Stall } from '@/types/stall';
+import { Trailer } from '@/types/trailer';
 
 export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'missed' | 'cancelled';
 
