@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { collection, getDocs, query, where, doc, getDoc, onSnapshot, updateDoc, Timestamp, addDoc, orderBy, limit, writeBatch, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db, auth, storage } from '@/lib/firebase';
 import Link from 'next/link';
@@ -1630,7 +1630,8 @@ const fetchAppointments = async () => {
   }
 };
 
-export default function AdminDashboardPage() {
+// Create a separate component that uses useSearchParams
+function AdminDashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const { user: authUser, loading: authLoading } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -2227,14 +2228,7 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
-      </div>
-    );
-  }
-
+  // Return the JSX for the component
   return (
     <div className="min-h-screen bg-[#1e1b1b] pt-24">
       <UserSelectionModal
@@ -2594,5 +2588,18 @@ export default function AdminDashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Main component that wraps the content in Suspense
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    }>
+      <AdminDashboardContent />
+    </Suspense>
   );
 } 
