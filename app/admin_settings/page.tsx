@@ -26,6 +26,7 @@ import CompanySignupLink from './components/CompanySignupLink';
 import Link from 'next/link';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { createBubbleUser } from '@/lib/bubble';
+import { useAdminGuard } from '../hooks/useAdminGuard';
 
 interface User {
   id: string;
@@ -41,6 +42,7 @@ interface User {
 }
 
 export default function AdminPage() {
+  const { authorized, loading } = useAdminGuard();
   const [isLoading, setIsLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<Company>({
     id: '',
@@ -155,6 +157,16 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [editingProfilePhotoFile, setEditingProfilePhotoFile] = useState<File | null>(null);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#131b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authorized) return null;
 
   // Fetch initial data
   useEffect(() => {

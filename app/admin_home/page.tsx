@@ -18,6 +18,7 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
+import { useAdminGuard } from '../hooks/useAdminGuard';
 
 interface User {
   id: string;
@@ -104,6 +105,17 @@ export default function AdminHomePage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const router = useRouter();
+  const { authorized, loading } = useAdminGuard();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authorized) return null;
 
   // Fetch initial data
   useEffect(() => {

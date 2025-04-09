@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { updateDoc, doc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { auth } from '@/lib/firebase';
-import { updateEmail } from 'firebase/auth';
+import { updateEmail, signOut } from 'firebase/auth';
 import { User, UserRole } from '@/types/user';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -241,6 +241,7 @@ export default function FloatingHeader() {
 
   const handleLogout = async () => {
     try {
+      await signOut(auth);
       router.push('/login');
     } catch (error) {
       console.error('Error logging out:', error);
