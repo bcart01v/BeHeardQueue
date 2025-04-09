@@ -28,6 +28,7 @@ import { useAuth } from '@/app/components/AuthContext';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { useSearchParams } from 'next/navigation';
+import { useAdminGuard } from '../hooks/useAdminGuard';
 
 interface Company {
   id: string;
@@ -2593,6 +2594,18 @@ function AdminDashboardContent() {
 
 // Main component that wraps the content in Suspense
 export default function AdminDashboardPage() {
+  const { authorized, loading } = useAdminGuard();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authorized) return null;
+  
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
