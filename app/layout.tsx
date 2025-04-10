@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./components/AuthContext";
 import HeaderWrapper from "./components/HeaderWrapper";
+import { headers } from 'next/headers';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,11 +33,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const xInvokePath = headersList.get('x-invoke-path');
+  const pathname = xInvokePath !== null ? xInvokePath : '';
+  const isTVDisplay = pathname.startsWith('/tv-display');
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <head>
@@ -46,10 +52,10 @@ export default function RootLayout({
           defer
         />
       </head>
-      <body className="bg-[#1e1b1b] text-white">
+      <body className={isTVDisplay ? "bg-white" : "bg-[#1e1b1b] text-white"}>
         <AuthProvider>
-          <HeaderWrapper />
-          <main className="min-h-screen">
+          {!isTVDisplay && <HeaderWrapper />}
+          <main className={isTVDisplay ? "" : "min-h-screen"}>
             {children}
           </main>
         </AuthProvider>
