@@ -60,12 +60,12 @@ interface Appointment {
   id: string;
   userId: string;
   companyId: string;
-  serviceType: 'shower' | 'laundry' | 'haircut';
+  serviceType: 'shower' | 'laundry';
   date: Date;
   startTime: string;
   endTime: string;
   duration?: number;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled';
   stallId: string;
   stallName?: string;
   userName?: string;
@@ -92,8 +92,9 @@ interface StallGridProps {
   selectedService: 'shower' | 'laundry';
   selectedTrailerId: string | null;
   selectedTimeSlot: {time: string, stallId: string, trailerId: string} | null;
-  updateAppointmentStatus: (appointmentId: string, newStatus: 'scheduled' | 'in-progress' | 'completed' | 'cancelled') => Promise<void>;
+  updateAppointmentStatus: (appointmentId: string, newStatus: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled') => Promise<void>;
   onTimeSlotSelect: (time: string, stallId: string, trailerId: string) => void;
+  onStallStatusChange: (stallId: string, newStatus: string) => void;
 }
 
 interface NewUserForm {
@@ -115,6 +116,8 @@ interface AppointmentBookingModalProps {
   setSelectedTimeSlot: (timeSlot: {time: string, stallId: string, trailerId: string} | null) => void;
   companyStartTime: string;
   companyEndTime: string;
+  selectedDate: Date;  // Add this prop
+  fetchAppointmentsForDate: (date: Date) => Promise<Appointment[]>;  // Update return type
 }
 
 function getCurrentTimeString(): string {
@@ -157,9 +160,11 @@ const StallGrid: React.FC<StallGridProps> = ({
   selectedTrailerId,
   selectedTimeSlot,
   updateAppointmentStatus, 
-  onTimeSlotSelect 
+  onTimeSlotSelect,
+  onStallStatusChange
 }) => {
   const [selectedGridAppointment, setSelectedGridAppointment] = useState<Appointment | null>(null);
+  const [showStatusMenuStallId, setShowStatusMenuStallId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const timeSlotsRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState<string>(getCurrentTimeString());
@@ -187,16 +192,6 @@ const StallGrid: React.FC<StallGridProps> = ({
     const closestIndex = findClosestTimeSlot(slots, currentTimeStr);
     setCurrentTimeIndex(closestIndex);
     
-    // Scroll to current time after a short delay to ensure the grid is rendered
-    setTimeout(() => {
-      if (timeSlotsRef.current) {
-        const timeRow = timeSlotsRef.current.querySelector(`[data-time-index="${closestIndex}"]`);
-        if (timeRow) {
-          timeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }
-    }, 500);
-    
     // Update current time every minute
     const interval = setInterval(() => {
       const newCurrentTime = getCurrentTimeString();
@@ -210,16 +205,29 @@ const StallGrid: React.FC<StallGridProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'in_use':
+      case 'in-use':
+        return 'bg-yellow-500 text-white';
+      case 'needs_cleaning':
+      case 'needs-cleaning':
+        return 'bg-orange-500 text-white';
+      case 'out_of_order':
+      case 'out-of-order':
+        return 'bg-red-500 text-white';
+      case 'available':
+        return 'bg-green-500 text-white';
       case 'scheduled':
         return 'bg-blue-500 text-white';
+      case 'checked-in':
+        return 'bg-purple-500 text-white';
       case 'in-progress':
         return 'bg-yellow-500 text-white';
       case 'completed':
         return 'bg-green-500 text-white';
       case 'cancelled':
-        return 'bg-black text-white';
+        return 'bg-red-500 text-white';
       default:
-        return 'bg-gray-200 text-gray-800';
+        return 'bg-[#1e1b1b] text-white';
     }
   };
 
@@ -227,35 +235,13 @@ const StallGrid: React.FC<StallGridProps> = ({
     return 'text-white'; // All backgrounds are dark enough for white text
   };
 
-  const getStallStatus = (stallId: string, time: string) => {
-    // First check if the stall itself has a status
+  const getStallStatus = (stallId: string) => {
+    // Only check the stall's own status
     const stall = stalls.find(s => s.id === stallId);
-    if (stall?.status === 'out-of-order') {
-      return { status: 'out-of-order', userName: null };
-    }
-    if (stall?.status === 'needs-cleaning') {
-      return { status: 'needs-cleaning', userName: null };
-    }
-
-    // Then check for appointments
-    const appointment = appointments.find(app => {
-      // Convert appointment times to 24-hour format for comparison
-      const appStartTime = convertTo24Hour(app.startTime);
-      const appEndTime = convertTo24Hour(app.endTime);
-      
-      return app.stallId === stallId && 
-             appStartTime <= time && 
-             appEndTime > time;
-    });
-
-    if (appointment) {
-      return { 
-        status: appointment.status,
-        userName: appointment.userName 
-      };
-    }
-
-    return { status: 'available', userName: null };
+    return {
+      status: stall?.status || 'available',
+      userName: null
+    };
   };
 
   const getAppointmentForCell = (stallId: string, time: string) => {
@@ -265,7 +251,8 @@ const StallGrid: React.FC<StallGridProps> = ({
       
       return app.stallId === stallId && 
              appStartTime <= time && 
-             appEndTime > time;
+             appEndTime > time &&
+             app.status !== 'cancelled'; // Add this condition to filter out cancelled appointments
     });
   };
 
@@ -292,18 +279,59 @@ const StallGrid: React.FC<StallGridProps> = ({
               <div className="flex">
                 {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                   .map(stall => {
-                    const currentStatus = getCurrentStallStatus(stall.id, stalls, appointments);
-                    const statusColor = getStatusColor(currentStatus.status);
+                    const stallStatus = getStallStatus(stall.id);
                     
                     return (
-                      <div 
-                        key={stall.id} 
-                        className={`flex-1 text-center p-2 border-r border-[#ffa300] bg-[#1e1b1b] text-white`}
-                      >
-                        <div className="font-medium">{stall.name}</div>
-                        {currentStatus.userName && (
-                          <div className="text-xs mt-1 text-white opacity-75">
-                            {currentStatus.userName}
+                      <div key={stall.id} className="flex-1">
+                        <div 
+                          className={`h-12 border-r border-[#ffa300] ${
+                            stall.serviceType === 'shower' ? getStatusColor(stallStatus.status) : 'bg-[#1e1b1b]'
+                          } relative group ${stall.serviceType === 'shower' ? 'cursor-pointer' : ''}`}
+                          onClick={() => stall.serviceType === 'shower' && setShowStatusMenuStallId(stall.id)}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center text-sm text-white font-medium px-1 truncate">
+                            {stall.name}
+                          </div>
+                        </div>
+
+                        {/* Status Selection Modal */}
+                        {showStatusMenuStallId === stall.id && stall.serviceType === 'shower' && (
+                          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-[#1e1b1b] rounded-lg p-6 w-full max-w-sm">
+                              <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-[#ffa300]">Update Status: {stall.name}</h3>
+                                <button 
+                                  onClick={() => setShowStatusMenuStallId(null)}
+                                  className="text-[#ffa300] hover:text-[#ffb733]"
+                                >
+                                  <XCircleIcon className="h-6 w-6" />
+                                </button>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                {[
+                                  { value: 'available', label: 'Available' },
+                                  { value: 'in_use', label: 'In Use' },
+                                  { value: 'needs_cleaning', label: 'Needs Cleaning' },
+                                  { value: 'out_of_order', label: 'Out of Order' }
+                                ].map(({ value, label }) => (
+                                  <button
+                                    key={value}
+                                    className={`w-full p-3 rounded-lg text-left transition-colors ${
+                                      value === stallStatus.status
+                                        ? 'bg-[#ffa300] text-[#1e1b1b]'
+                                        : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                                    }`}
+                                    onClick={() => {
+                                      onStallStatusChange(stall.id, value);
+                                      setShowStatusMenuStallId(null);
+                                    }}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -329,9 +357,7 @@ const StallGrid: React.FC<StallGridProps> = ({
                 <div key={`${trailer.id}-${time}`} className="flex-1 flex">
                   {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                     .map(stall => {
-                      const stallStatus = getStallStatus(stall.id, time);
                       const appointment = getAppointmentForCell(stall.id, time);
-                      const showColor = appointment !== undefined;
                       
                       return (
                         <div 
@@ -342,12 +368,16 @@ const StallGrid: React.FC<StallGridProps> = ({
                             selectedTimeSlot.stallId === stall.id
                               ? 'ring-2 ring-[#ffa300] ring-offset-2 ring-offset-[#1e1b1b]'
                               : ''
-                          } ${showColor ? getStatusColor(stallStatus.status) : 'bg-[#1e1b1b]'} relative group cursor-pointer`}
+                          } ${
+                            appointment 
+                              ? getStatusColor(appointment.status)
+                              : 'bg-[#1e1b1b]'
+                          } relative group cursor-pointer`}
                           onClick={() => handleTimeSlotClick(time, stall.id, trailer.id, appointment)}
                         >
-                          {stallStatus.userName && (
-                            <div className="absolute inset-0 flex items-center justify-center text-xs text-white font-medium px-1 truncate">
-                              {stallStatus.userName}
+                          {appointment && (
+                            <div className="absolute inset-0 flex items-center justify-center text-sm sm:text-base md:text-lg font-medium text-white px-0.5 truncate">
+                              {appointment.userName}
                             </div>
                           )}
                         </div>
@@ -401,18 +431,14 @@ const StallGrid: React.FC<StallGridProps> = ({
               
               <div>
                 <p className="text-sm text-gray-300">Time</p>
-                <p className="font-medium">{selectedGridAppointment.startTime} - {selectedGridAppointment.endTime}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-300">Duration</p>
-                <p className="font-medium">{selectedGridAppointment.duration ? `${selectedGridAppointment.duration} minutes` : 'N/A'}</p>
+                <p className="font-medium">{formatTimeForDisplay(selectedGridAppointment.startTime)} - {formatTimeForDisplay(selectedGridAppointment.endTime)}</p>
               </div>
               
               <div>
                 <p className="text-sm text-gray-300">Status</p>
                 <span className={`px-2 py-1 rounded-full text-xs ${
                   selectedGridAppointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                  selectedGridAppointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
                   selectedGridAppointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
                   selectedGridAppointment.status === 'completed' ? 'bg-green-500 text-white' :
                   'bg-red-500 text-white'
@@ -436,7 +462,19 @@ const StallGrid: React.FC<StallGridProps> = ({
               {selectedGridAppointment.status === 'scheduled' && (
                 <button 
                   onClick={() => {
+                    updateAppointmentStatus(selectedGridAppointment.id, 'checked-in');
+                    setSelectedGridAppointment(null);
+                  }}
+                  className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+                >
+                  Check-in
+                </button>
+              )}
+              {selectedGridAppointment.status === 'checked-in' && (
+                <button 
+                  onClick={() => {
                     updateAppointmentStatus(selectedGridAppointment.id, 'in-progress');
+                    onStallStatusChange(selectedGridAppointment.stallId, 'in_use');
                     setSelectedGridAppointment(null);
                   }}
                   className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
@@ -448,6 +486,8 @@ const StallGrid: React.FC<StallGridProps> = ({
                 <button 
                   onClick={() => {
                     updateAppointmentStatus(selectedGridAppointment.id, 'completed');
+                    const newStatus = selectedGridAppointment.serviceType === 'shower' ? 'needs_cleaning' : 'available';
+                    onStallStatusChange(selectedGridAppointment.stallId, newStatus);
                     setSelectedGridAppointment(null);
                   }}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
@@ -455,7 +495,7 @@ const StallGrid: React.FC<StallGridProps> = ({
                   Complete Service
                 </button>
               )}
-              {(selectedGridAppointment.status === 'scheduled' || selectedGridAppointment.status === 'in-progress') && (
+              {(selectedGridAppointment.status === 'scheduled' || selectedGridAppointment.status === 'checked-in') && (
                 <button 
                   onClick={() => {
                     updateAppointmentStatus(selectedGridAppointment.id, 'cancelled');
@@ -1025,7 +1065,9 @@ function AppointmentBookingModal({
   selectedTimeSlot,
   setSelectedTimeSlot,
   companyStartTime,
-  companyEndTime
+  companyEndTime,
+  selectedDate,
+  fetchAppointmentsForDate
 }: AppointmentBookingModalProps) {
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1072,9 +1114,13 @@ function AppointmentBookingModal({
       const hours = parseInt(hoursStr, 10);
       const minutes = parseInt(minutesStr, 10);
       
-      const endDate = new Date();
-      endDate.setHours(hours);
-      endDate.setMinutes(minutes);
+      // Create a new date object using the selected date
+      const appointmentDate = new Date(selectedDate);
+      appointmentDate.setHours(hours);
+      appointmentDate.setMinutes(minutes);
+      
+      // Calculate end time
+      const endDate = new Date(appointmentDate);
       endDate.setMinutes(endDate.getMinutes() + (stallData.duration || 30));
       const endTimeString = endDate.toLocaleTimeString('en-US', { 
         hour: '2-digit',
@@ -1083,13 +1129,17 @@ function AppointmentBookingModal({
       });
 
       // Check if there's already an appointment for this stall at this time
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const startOfDay = new Date(selectedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(selectedDate);
+      endOfDay.setHours(23, 59, 59, 999);
       
       const appointmentsQuery = query(
         collection(db, 'appointments'),
         where('companyId', '==', companyId),
-        where('date', '==', Timestamp.fromDate(today)),
+        where('date', '>=', Timestamp.fromDate(startOfDay)),
+        where('date', '<=', Timestamp.fromDate(endOfDay)),
         where('stallId', '==', selectedTimeSlot.stallId)
       );
       
@@ -1110,14 +1160,13 @@ function AppointmentBookingModal({
         return;
       }
 
-      const now = new Date();
       const appointment = {
         userId: user.id,
         companyId,
         stallId: selectedTimeSlot.stallId,
         trailerId: selectedTimeSlot.trailerId,
         serviceType: selectedService,
-        date: Timestamp.fromDate(now),
+        date: Timestamp.fromDate(appointmentDate),
         startTime: timeString,
         endTime: endTimeString,
         duration: stallData.duration || 30,
@@ -1127,7 +1176,12 @@ function AppointmentBookingModal({
       };
 
       await addDoc(collection(db, 'appointments'), appointment);
-      onAppointmentCreated();
+      
+      // Fetch appointments for the selected date after creating a new one
+      const updatedAppointments = await fetchAppointmentsForDate(selectedDate);
+      console.log('Updated appointments after creation:', updatedAppointments);
+      
+      // Close the modal
       onClose();
     } catch (error) {
       console.error('Error creating appointment:', error);
@@ -1232,10 +1286,13 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
   
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'in_use':
       case 'in-use':
         return 'bg-yellow-500';
+      case 'needs_cleaning':
       case 'needs-cleaning':
         return 'bg-orange-500';
+      case 'out_of_order':
       case 'out-of-order':
         return 'bg-red-500';
       default:
@@ -1245,10 +1302,13 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
 
   const formatStatus = (status: string) => {
     switch (status) {
+      case 'in_use':
       case 'in-use':
         return 'In Use';
+      case 'needs_cleaning':
       case 'needs-cleaning':
         return 'Needs Cleaning';
+      case 'out_of_order':
       case 'out-of-order':
         return 'Out of Order';
       default:
@@ -1258,9 +1318,9 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
 
   const statusOptions = [
     { value: 'available', label: 'Available' },
-    { value: 'in-use', label: 'In Use' },
-    { value: 'needs-cleaning', label: 'Needs Cleaning' },
-    { value: 'out-of-order', label: 'Out of Order' }
+    { value: 'in_use', label: 'In Use' },
+    { value: 'needs_cleaning', label: 'Needs Cleaning' },
+    { value: 'out_of_order', label: 'Out of Order' }
   ];
 
   return (
@@ -1780,8 +1840,6 @@ function AdminDashboardContent() {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      console.log('Fetching appointments for date:', date.toISOString());
-
       const appointmentsRef = collection(db, 'appointments');
       const q = query(
         appointmentsRef,
@@ -1860,7 +1918,6 @@ function AdminDashboardContent() {
         return timeA.getTime() - timeB.getTime();
       });
 
-      console.log(`Found ${appointments.length} appointments for date ${date.toISOString()}`);
       setTodayAppointments(appointments);
       
       // If there's a selected appointment, update it with the latest data
@@ -1917,11 +1974,6 @@ function AdminDashboardContent() {
     const endOfDay = new Date(selectedDate);
     endOfDay.setHours(23, 59, 59, 999);
     
-    console.log('Setting up real-time listeners for date range:', {
-      startOfDay: startOfDay.toISOString(),
-      endOfDay: endOfDay.toISOString()
-    });
-    
     // Set up real-time listener for appointments
     const appointmentsQuery = query(
       collection(db, 'appointments'),
@@ -1932,8 +1984,6 @@ function AdminDashboardContent() {
     );
     
     const unsubscribeAppointments = onSnapshot(appointmentsQuery, async (snapshot) => {
-      console.log('Real-time update received. Number of appointments:', snapshot.size);
-      
       // Get all users for this company to map IDs to names
       const usersQuery = query(
         collection(db, 'users'),
@@ -1963,10 +2013,9 @@ function AdminDashboardContent() {
       });
       
       const appointments: Appointment[] = [];
+      
       snapshot.forEach(doc => {
         const data = doc.data();
-        console.log('Processing appointment:', data);
-        
         const stallName = stallsMap.get(data.stallId) || `Stall ${data.stallId.substring(0, 4)}`;
         const userName = usersMap.get(data.userId) || `User ${data.userId.substring(0, 4)}`;
         
@@ -2047,17 +2096,63 @@ function AdminDashboardContent() {
     };
   };
 
-  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'in-progress' | 'completed' | 'cancelled') => {
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled') => {
     try {
+      // Get the current appointment first
       const appointmentRef = doc(db, 'appointments', appointmentId);
-      await updateDoc(appointmentRef, {
-        status: newStatus,
-        updatedAt: Timestamp.now()
-      });
-      
-      // Create a notification for the user
-      const appointment = todayAppointments.find(a => a.id === appointmentId);
-      if (appointment) {
+      const appointmentSnap = await getDoc(appointmentRef);
+      if (!appointmentSnap.exists()) {
+        throw new Error('Appointment not found');
+      }
+      const appointment = appointmentSnap.data();
+
+      // If the new status is 'checked-in', update all appointments for this user today
+      if (newStatus === 'checked-in') {
+        // Get start and end of today
+        const today = new Date(appointment.date.toDate());
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Query all appointments for this user today
+        const appointmentsQuery = query(
+          collection(db, 'appointments'),
+          where('userId', '==', appointment.userId),
+          where('date', '>=', Timestamp.fromDate(today)),
+          where('date', '<', Timestamp.fromDate(tomorrow)),
+          where('status', '==', 'scheduled')
+        );
+
+        const querySnapshot = await getDocs(appointmentsQuery);
+        const batch = writeBatch(db);
+
+        // Update all appointments in a batch
+        querySnapshot.docs.forEach(doc => {
+          batch.update(doc.ref, {
+            status: 'checked-in',
+            updatedAt: Timestamp.now()
+          });
+        });
+
+        await batch.commit();
+
+        // Create notifications for all updated appointments
+        for (const doc of querySnapshot.docs) {
+          const appointmentData = doc.data();
+          await createNotification(
+            appointmentData.userId,
+            `Your ${appointmentData.serviceType} appointment has been checked in.`,
+            'info'
+          );
+        }
+      } else {
+        // For other status updates, just update the single appointment
+        await updateDoc(appointmentRef, {
+          status: newStatus,
+          updatedAt: Timestamp.now()
+        });
+        
+        // Create a notification for the user
         await createNotification(
           appointment.userId,
           `Your ${appointment.serviceType} appointment has been ${newStatus}.`,
@@ -2068,6 +2163,7 @@ function AdminDashboardContent() {
       }
     } catch (error) {
       console.error('Error updating appointment status:', error);
+      toast.error('Failed to update appointment status');
     }
   };
 
@@ -2253,21 +2349,25 @@ function AdminDashboardContent() {
         companyId={currentUser?.companyId || ''}
       />
 
-      {selectedUser && (
+      {showAppointmentModal && selectedUser && (
         <AppointmentBookingModal
           isOpen={showAppointmentModal}
           onClose={() => {
             setShowAppointmentModal(false);
-            setSelectedUser(null);
             setSelectedTimeSlot(null);
           }}
           user={selectedUser}
           companyId={currentUser?.companyId || ''}
-          onAppointmentCreated={handleAppointmentCreated}
+          onAppointmentCreated={() => {
+            setShowAppointmentModal(false);
+            setSelectedTimeSlot(null);
+          }}
           selectedTimeSlot={selectedTimeSlot}
           setSelectedTimeSlot={setSelectedTimeSlot}
           companyStartTime={companyStartTime}
           companyEndTime={companyEndTime}
+          selectedDate={selectedDate}
+          fetchAppointmentsForDate={fetchAppointmentsForDate}
         />
       )}
 
@@ -2301,9 +2401,9 @@ function AdminDashboardContent() {
           </div>
         </div>
         
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Left side - Appointments for selected date */}
-          <div className="w-1/4 min-w-[300px] bg-[#1e1b1b]">
+          <div className="w-full lg:w-1/4 lg:min-w-[300px] bg-[#1e1b1b]">
             <button
               onClick={() => setShowUserSelectionModal(true)}
               className="w-full px-4 py-2 mb-4 bg-[#ffa300] text-[#1e1b1b] rounded-lg hover:bg-[#ffb733] transition-colors flex items-center justify-center space-x-2"
@@ -2313,23 +2413,30 @@ function AdminDashboardContent() {
             </button>
 
             <h2 className="text-xl font-bold mb-4 text-[#ffa300]">Appointments for {format(selectedDate, 'MMMM d, yyyy')}</h2>
-            <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+            <div className="space-y-2 max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-200px)] overflow-y-auto">
               {todayAppointments.map((appointment) => (
                 <div key={appointment.id}>
                   <div 
                     className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
                       selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
                     }`}
-                    onClick={() => viewAppointmentDetails(appointment)}
+                    onClick={() => {
+                      if (selectedAppointment?.id === appointment.id) {
+                        setSelectedAppointment(null);
+                      } else {
+                        viewAppointmentDetails(appointment);
+                      }
+                    }}
                   >
                     <div className="flex justify-between items-center">
                       <div>
                         <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
-                        <p className="text-white text-sm">{appointment.startTime}</p>
+                        <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
                         <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs ${
                         appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                        appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
                         appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
                         appointment.status === 'completed' ? 'bg-green-500 text-white' :
                         'bg-red-500 text-white'
@@ -2339,72 +2446,90 @@ function AdminDashboardContent() {
                     </div>
 
                     {/* Appointment Details Section - Inline */}
-                    {selectedAppointment && selectedAppointment.id === appointment.id && (
-                      <div className="mt-2 mb-2 bg-[#2a1f02] p-4 rounded-lg">
-                        <div className="grid grid-cols-1 gap-4">
+                    <div 
+                      className={`mt-2 mb-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                        selectedAppointment && selectedAppointment.id === appointment.id
+                          ? 'max-h-[500px] opacity-100'
+                          : 'max-h-0 opacity-0'
+                      }`}
+                    >
+                      <div className="bg-[#2a1f02] p-4 rounded-lg">
+                        <div className="space-y-4">
                           <div>
-                            <p className="text-sm text-gray-300">Customer</p>
-                            <p className="font-medium text-[#ffa300]">{selectedAppointment.userName || 'Unknown User'}</p>
-                          </div>
-
-                          <div>
-                            <p className="text-sm text-gray-300">Service Type</p>
-                            <p className="font-medium text-[#ffa300] capitalize">{selectedAppointment.serviceType}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-300">Time</p>
-                            <p className="font-medium text-[#ffa300]">{selectedAppointment.startTime} - {selectedAppointment.endTime}</p>
+                            <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
+                            <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
                           </div>
                           
                           <div>
-                            <p className="text-sm text-gray-300">Duration</p>
-                            <p className="font-medium text-[#ffa300]">{selectedAppointment.duration ? `${selectedAppointment.duration} minutes` : 'N/A'}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-300">Status</p>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              selectedAppointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
-                              selectedAppointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
-                              selectedAppointment.status === 'completed' ? 'bg-green-500 text-white' :
-                              'bg-red-500 text-white'
-                            }`}>
-                              {selectedAppointment.status}
-                            </span>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-300">Stall</p>
-                            <p className="font-medium text-[#ffa300]">{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-300">Created At</p>
-                            <p className="font-medium text-[#ffa300]">{selectedAppointment.createdAt.toLocaleString()}</p>
+                            <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-sm text-gray-400">Service Type</p>
+                                <p className="text-white capitalize">{appointment.serviceType}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-400">Time</p>
+                                <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-400">Status</p>
+                                <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                  appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                                  appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                                  appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                                  appointment.status === 'completed' ? 'bg-green-500 text-white' :
+                                  'bg-red-500 text-white'
+                                }`}>
+                                  {appointment.status}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-400">Stall</p>
+                                <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-400">Created</p>
+                                <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         
-                        <div className="flex flex-wrap justify-end gap-2 mt-4">
-                          {selectedAppointment.status === 'scheduled' && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {appointment.status === 'scheduled' && (
                             <button 
-                              onClick={() => updateAppointmentStatus(selectedAppointment.id, 'in-progress')}
+                              onClick={() => updateAppointmentStatus(appointment.id, 'checked-in')}
+                              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+                            >
+                              Check-in
+                            </button>
+                          )}
+                          {appointment.status === 'checked-in' && (
+                            <button 
+                              onClick={() => {
+                                updateAppointmentStatus(appointment.id, 'in-progress');
+                                handleStallStatusChange(appointment.stallId, 'in_use');
+                              }}
                               className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
                             >
                               Start Service
                             </button>
                           )}
-                          {selectedAppointment.status === 'in-progress' && (
+                          {appointment.status === 'in-progress' && (
                             <button 
-                              onClick={() => updateAppointmentStatus(selectedAppointment.id, 'completed')}
+                              onClick={() => {
+                                updateAppointmentStatus(appointment.id, 'completed');
+                                const newStatus = appointment.serviceType === 'shower' ? 'needs_cleaning' : 'available';
+                                handleStallStatusChange(appointment.stallId, newStatus);
+                              }}
                               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
                             >
                               Complete Service
                             </button>
                           )}
-                          {(selectedAppointment.status === 'scheduled' || selectedAppointment.status === 'in-progress') && (
+                          {(appointment.status === 'scheduled' || appointment.status === 'checked-in') && (
                             <button 
-                              onClick={() => updateAppointmentStatus(selectedAppointment.id, 'cancelled')}
+                              onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
                               className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                             >
                               Cancel Service
@@ -2421,14 +2546,14 @@ function AdminDashboardContent() {
                           </button>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
           
-          {/* Right side - Service Toggle and Stall Grid - Make wider */}
+          {/* Right side - Service Toggle and Stall Grid */}
           <div className="flex-1 bg-[#1e1b1b] min-w-0">
             {/* Service Type Toggle Buttons */}
             <div className="flex space-x-4 mb-4">
@@ -2507,82 +2632,127 @@ function AdminDashboardContent() {
               selectedTimeSlot={selectedTimeSlot}
               updateAppointmentStatus={updateAppointmentStatus}
               onTimeSlotSelect={handleTimeSlotSelect}
+              onStallStatusChange={handleStallStatusChange}
             />
           </div>
         </div>
 
         {/* Add the Stall Status Section */}
-        <StallStatusSection
-          stalls={stalls}
-          trailers={trailers}
-          onStatusChange={handleStallStatusChange}
-        />
+        <div className="mt-6">
+          <StallStatusSection
+            stalls={stalls}
+            trailers={trailers}
+            onStatusChange={handleStallStatusChange}
+          />
+        </div>
 
         {/* Mobile appointment details modal */}
         {selectedAppointment && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 md:hidden">
-            <div className="bg-[#3e2802] text-[#ffa300] p-6 rounded-lg shadow-lg max-w-md w-full">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">Appointment Details</h3>
+            <div className="bg-[#1e1b1b] border border-[#ffa300] p-6 rounded-lg shadow-lg max-w-md w-full">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-[#ffa300]">Appointment Details</h3>
                 <button 
                   onClick={closeAppointmentDetails}
-                  className="text-[#ffa300] hover:text-white"
+                  className="text-[#ffa300] hover:text-[#ffb733] transition-colors"
                 >
                   <XCircleIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-300">Customer</p>
-                  <p className="font-medium capitalize">{selectedAppointment.userName || 'Unknown User'}</p>
+              <div className="space-y-4">
+                <div className="bg-[#2a1f02] p-4 rounded-lg">
+                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
+                  <p className="text-white font-medium capitalize">{selectedAppointment.userName || 'Unknown User'}</p>
                 </div>
                 
-                <div>
-                  <p className="text-sm text-gray-300">Service Type</p>
-                  <p className="font-medium capitalize">{selectedAppointment.serviceType}</p>
+                <div className="bg-[#2a1f02] p-4 rounded-lg">
+                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-sm text-gray-400">Service Type</p>
+                      <p className="text-white capitalize">{selectedAppointment.serviceType}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Time</p>
+                      <p className="text-white">{formatTimeForDisplay(selectedAppointment.startTime)} - {formatTimeForDisplay(selectedAppointment.endTime)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Status</p>
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                        selectedAppointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                        selectedAppointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                        selectedAppointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                        selectedAppointment.status === 'completed' ? 'bg-green-500 text-white' :
+                        'bg-red-500 text-white'
+                      }`}>
+                        {selectedAppointment.status}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Stall</p>
+                      <p className="text-white">{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Created</p>
+                      <p className="text-white text-sm">{format(new Date(selectedAppointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                    </div>
+                  </div>
                 </div>
                 
-                <div>
-                  <p className="text-sm text-gray-300">Time</p>
-                  <p className="font-medium">{selectedAppointment.startTime} - {selectedAppointment.endTime}</p>
+                <div className="bg-[#2a1f02] p-4 rounded-lg">
+                  <h4 className="text-[#ffa300] font-medium mb-2">Actions</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedAppointment.status === 'scheduled' && (
+                      <button 
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, 'checked-in')}
+                        className="p-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                      >
+                        Check-in
+                      </button>
+                    )}
+                    {selectedAppointment.status === 'checked-in' && (
+                      <button 
+                        onClick={() => {
+                          updateAppointmentStatus(selectedAppointment.id, 'in-progress');
+                          handleStallStatusChange(selectedAppointment.stallId, 'in_use');
+                        }}
+                        className="p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                      >
+                        Start Service
+                      </button>
+                    )}
+                    {selectedAppointment.status === 'in-progress' && (
+                      <button 
+                        onClick={() => {
+                          updateAppointmentStatus(selectedAppointment.id, 'completed');
+                          const newStatus = selectedAppointment.serviceType === 'shower' ? 'needs_cleaning' : 'available';
+                          handleStallStatusChange(selectedAppointment.stallId, newStatus);
+                        }}
+                        className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      >
+                        Complete Service
+                      </button>
+                    )}
+                    {(selectedAppointment.status === 'scheduled' || selectedAppointment.status === 'checked-in') && (
+                      <button 
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, 'cancelled')}
+                        className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                      >
+                        Cancel Service
+                      </button>
+                    )}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedAppointment(null);
+                      }}
+                      className="p-2 bg-[#1e1b1b] text-[#ffa300] rounded-lg hover:bg-[#2a2525] transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
-                
-                <div>
-                  <p className="text-sm text-gray-300">Duration</p>
-                  <p className="font-medium">{selectedAppointment.duration ? `${selectedAppointment.duration} minutes` : 'N/A'}</p>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-300">Status</p>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    selectedAppointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
-                    selectedAppointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
-                    selectedAppointment.status === 'completed' ? 'bg-green-500 text-white' :
-                    'bg-red-500 text-white'
-                  }`}>
-                    {selectedAppointment.status}
-                  </span>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-300">Stall</p>
-                  <p className="font-medium text-[#ffa300]">{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-300">Created At</p>
-                  <p className="font-medium text-[#ffa300]">{selectedAppointment.createdAt.toLocaleString()}</p>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end space-x-2">
-                <button 
-                  onClick={closeAppointmentDetails}
-                  className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
-                >
-                  Close
-                </button>
               </div>
             </div>
           </div>

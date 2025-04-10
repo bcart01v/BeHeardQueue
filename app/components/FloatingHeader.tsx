@@ -42,11 +42,16 @@ function ProfileEditModal({
   // Initialize form with user data when modal opens
   useEffect(() => {
     if (user) {
+      console.log('User data:', user); // Debug log
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
-      setProfilePhotoPreview(user.profilePhoto || null);
+      // Set the profile photo preview to the user's existing profile photo URL
+      if (user.profilePhoto) {
+        console.log('Profile photo URL:', user.profilePhoto); // Debug log
+        setProfilePhotoPreview(user.profilePhoto);
+      }
     }
   }, [user]);
 
@@ -192,9 +197,11 @@ function ProfileEditModal({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+              className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-gray-200 cursor-not-allowed"
               required
+              readOnly
             />
+            <p className="text-xs text-gray-400 mt-1">Email changes are currently disabled.</p>
           </div>
 
           <div className="mb-4">
@@ -272,11 +279,13 @@ export default function FloatingHeader() {
 
       // Update user document in Firestore
       const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, {
+      const updateData = {
         ...updatedUser,
         profilePhoto: profilePhotoURL,
         updatedAt: new Date()
-      });
+      };
+      
+      await updateDoc(userRef, updateData);
       
       // If email was changed, update auth email
       if (updatedUser.email && updatedUser.email !== user.email) {

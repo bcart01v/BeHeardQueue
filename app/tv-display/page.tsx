@@ -31,7 +31,7 @@ interface Appointment {
   date: Date;
   startTime: string;
   endTime: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled';
   stallId: string;
   stallName?: string;
   userName?: string;
@@ -124,51 +124,64 @@ export default function TVDisplayPage() {
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
   
-  // Get status color for appointment
+  // Convert 12-hour time to 24-hour time
+  const convertTo24Hour = (time: string) => {
+    const [timeStr, period] = time.split(' ');
+    let [hours, minutes] = timeStr.split(':').map(Number);
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+  
+  // Set status color.
   const getStatusColor = (status: string) => {
-    switch (status) {
+    // Normalize status by replacing underscores with hyphens
+    const normalizedStatus = status.replace(/_/g, '-');
+    
+    switch (normalizedStatus) {
+      case 'in-use':
+        return 'bg-yellow-500 text-white';
+      case 'out-of-order':
+        return 'bg-red-500 text-white';
+      case 'needs-cleaning':
+        return 'bg-orange-500 text-white';
+      case 'available':
+        return 'bg-green-500 text-white';
       case 'scheduled':
         return 'bg-blue-500 text-white';
+      case 'checked-in':
+        return 'bg-purple-500 text-white';
       case 'in-progress':
         return 'bg-yellow-500 text-white';
       case 'completed':
         return 'bg-green-500 text-white';
       case 'cancelled':
-        return 'bg-black text-white';
+        return 'bg-red-500 text-white';
       default:
-        return 'bg-gray-200 text-gray-800';
+        return 'bg-gray-100 text-gray-800';
     }
   };
   
-  // Get stall status for a specific time
-  const getStallStatus = (stallId: string, time: string) => {
-    // First check if the stall itself has a status
+  // Get current stall status.
+  const getStallStatus = (stallId: string) => {
     const stall = stalls.find(s => s.id === stallId);
-    if (stall?.status === 'out-of-order') {
+    // Normalize status by replacing underscores with hyphens
+    const normalizedStatus = stall?.status?.replace(/_/g, '-') || 'available';
+    
+    if (normalizedStatus === 'out-of-order') {
       return { status: 'out-of-order', userName: null };
     }
-    if (stall?.status === 'needs-cleaning') {
+    if (normalizedStatus === 'needs-cleaning') {
       return { status: 'needs-cleaning', userName: null };
     }
-
-    // Then check for appointments
-    const appointment = appointments.find(app => {
-      // Convert appointment times to 24-hour format for comparison
-      const appStartTime = app.startTime;
-      const appEndTime = app.endTime;
-      
-      return app.stallId === stallId && 
-             appStartTime <= time && 
-             appEndTime > time;
-    });
-
-    if (appointment) {
-      return { 
-        status: appointment.status,
-        userName: appointment.userName 
-      };
+    if (normalizedStatus === 'in-use') {
+      return { status: 'in-use', userName: null };
     }
-
     return { status: 'available', userName: null };
   };
   
@@ -209,17 +222,18 @@ export default function TVDisplayPage() {
   
   // Fetch stalls and trailers
   useEffect(() => {
-    const fetchStallsAndTrailers = async () => {
-      if (!companyId) return;
-      
+    if (!companyId) return;
+    
+    // Query for stalls
+    const stallsQuery = query(
+      collection(db, 'stalls'),
+      where('companyId', '==', companyId),
+      where('serviceType', '==', 'shower')
+    );
+
+    // Set up real-time listener for stalls
+    const unsubscribeStalls = onSnapshot(stallsQuery, async (stallsSnapshot) => {
       try {
-        // Fetch stalls
-        const stallsQuery = query(
-          collection(db, 'stalls'),
-          where('companyId', '==', companyId),
-          where('serviceType', '==', 'shower')
-        );
-        const stallsSnapshot = await getDocs(stallsQuery);
         const stallsData = stallsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -242,11 +256,13 @@ export default function TVDisplayPage() {
         }
         setTrailers(trailersData);
       } catch (error) {
-        console.error('Error fetching stalls and trailers:', error);
+        console.error('Error processing stalls update:', error);
       }
-    };
+    });
     
-    fetchStallsAndTrailers();
+    return () => {
+      unsubscribeStalls();
+    };
   }, [companyId]);
   
   // Fetch appointments and set up real-time listener
@@ -382,6 +398,19 @@ export default function TVDisplayPage() {
     filteredStalls.some(stall => stall.trailerGroup === trailer.id)
   );
   
+  // Get appointment for a specific stall and time
+  const getAppointmentForCell = (stallId: string, time: string) => {
+    return appointments.find(app => {
+      const appStartTime = convertTo24Hour(app.startTime);
+      const appEndTime = convertTo24Hour(app.endTime);
+      
+      return app.stallId === stallId && 
+             appStartTime <= time && 
+             appEndTime > time &&
+             app.status !== 'cancelled'; // Filter out cancelled appointments
+    });
+  };
+  
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -416,16 +445,17 @@ export default function TVDisplayPage() {
               <div className="flex">
                 {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                   .map(stall => {
-                    const currentStatus = getStallStatus(stall.id, currentTime);
+                    const currentStatus = getStallStatus(stall.id);
+                    const statusColor = getStatusColor(currentStatus.status);
                     
                     return (
                       <div 
                         key={stall.id} 
-                        className="flex-1 text-center p-2 border-r border-gray-300 bg-gray-100 text-black"
+                        className={`flex-1 text-center p-2 border-r border-gray-300 ${statusColor}`}
                       >
-                        <div className="font-medium">{stall.name}</div>
+                        <div className="text-2xl font-medium">{stall.name}</div>
                         {currentStatus.userName && (
-                          <div className="text-xs mt-1 text-black opacity-75">
+                          <div className="text-xs mt-1 opacity-75">
                             {currentStatus.userName}
                           </div>
                         )}
@@ -452,19 +482,17 @@ export default function TVDisplayPage() {
                 <div key={`${trailer.id}-${time}`} className="flex-1 flex">
                   {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                     .map(stall => {
-                      const stallStatus = getStallStatus(stall.id, time);
-                      const showColor = stallStatus.status !== 'available';
+                      const appointment = getAppointmentForCell(stall.id, time);
+                      const statusColor = appointment ? getStatusColor(appointment.status) : 'bg-white';
                       
                       return (
                         <div 
                           key={`${stall.id}-${time}`} 
-                          className={`flex-1 h-12 border-r border-gray-300 ${
-                            showColor ? getStatusColor(stallStatus.status) : 'bg-white'
-                          } relative group`}
+                          className={`flex-1 h-12 border-r border-gray-300 ${statusColor} relative group`}
                         >
-                          {stallStatus.userName && (
-                            <div className="absolute inset-0 flex items-center justify-center text-xs text-white font-medium px-1 truncate">
-                              {stallStatus.userName}
+                          {appointment && (
+                            <div className="absolute inset-0 flex items-center justify-center text-4xl text-white font-medium px-1 truncate">
+                              {appointment.userName}
                             </div>
                           )}
                         </div>
