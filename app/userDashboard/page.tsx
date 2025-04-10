@@ -1255,14 +1255,6 @@ export default function UserDashboardPage() {
     appointmentDate.setHours(12, 0, 0, 0);
     today.setHours(12, 0, 0, 0);
     
-    console.log('Filtering appointment:', {
-      tab: activeTab,
-      appointmentDate: appointmentDate.toLocaleDateString(),
-      today: today.toLocaleDateString(),
-      isPast: appointmentDate < today,
-      isFuture: appointmentDate >= today
-    });
-    
     if (activeTab === 'upcoming') {
       // Show today's appointments in upcoming
       return appointmentDate >= today;
@@ -1270,13 +1262,6 @@ export default function UserDashboardPage() {
       // Past tab should show appointments before today
       return appointmentDate < today;
     }
-  });
-
-  // Log filtered results
-  console.log('Filtered appointments:', {
-    activeTab,
-    totalAppointments: appointments.length,
-    filteredCount: filteredAppointments.length
   });
 
   // Group appointments by date
@@ -1292,13 +1277,6 @@ export default function UserDashboardPage() {
       0,
       0
     );
-    
-    console.log('Grouping appointment:', {
-      originalDate: appointment.date,
-      appointmentDate: appointmentDate.toISOString(),
-      localDate: localDate.toLocaleDateString(),
-      formattedLocalDate: format(localDate, 'yyyy-MM-dd')
-    });
     
     const date = format(localDate, 'yyyy-MM-dd');
     

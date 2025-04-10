@@ -39,6 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               lastName: userData.lastName || '',
               role: userData.role || 'user',
               companyId: userData.companyId || '',
+              profilePhoto: userData.profilePhoto || '',
+              phone: userData.phone || '',
               createdAt: userData.createdAt?.toDate() || new Date(),
               updatedAt: userData.updatedAt?.toDate() || new Date(),
               displayName: userData.displayName || firebaseUser.displayName || undefined

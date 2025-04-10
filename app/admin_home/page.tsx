@@ -82,9 +82,7 @@ interface Appointment {
 }
 
 interface GroupedAppointments {
-  [date: string]: {
-    [userId: string]: Appointment[];
-  };
+  [date: string]: Appointment[];
 }
 
 export default function AdminHomePage() {
@@ -97,8 +95,7 @@ export default function AdminHomePage() {
     scheduledHaircuts: 0,
     userCount: 0
   });
-  const [futureAppointments, setFutureAppointments] = useState<Appointment[]>([]);
-  const [groupedAppointments, setGroupedAppointments] = useState<GroupedAppointments>({});
+  const [futureAppointments, setFutureAppointments] = useState<GroupedAppointments>({});
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(addDays(new Date(), 7));
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
@@ -106,16 +103,6 @@ export default function AdminHomePage() {
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const router = useRouter();
   const { authorized, loading } = useAdminGuard();
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!authorized) return null;
 
   // Fetch initial data
   useEffect(() => {
@@ -279,32 +266,26 @@ export default function AdminHomePage() {
 
   // Fetch future appointments
   const fetchFutureAppointments = async () => {
-    if (!currentUser?.companyId) return;
-    
     try {
-      setIsLoadingAppointments(true);
-      
-      // Convert dates to Firestore Timestamps
-      const startTimestamp = Timestamp.fromDate(startDate);
-      const endTimestamp = Timestamp.fromDate(endDate);
-      
-      console.log('Fetching appointments between:', {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-      });
-      
-      // Query for appointments in the date range
-      const appointmentsQuery = query(
-        collection(db, 'appointments'),
+      if (!currentUser?.companyId) {
+        console.error('No company ID available');
+        return;
+      }
+
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const appointmentsRef = collection(db, 'appointments');
+      const q = query(
+        appointmentsRef,
         where('companyId', '==', currentUser.companyId),
-        where('date', '>=', startTimestamp),
-        where('date', '<=', endTimestamp),
-        where('status', 'in', ['scheduled', 'in_progress']),
+        where('date', '>=', Timestamp.fromDate(startOfDay)),
         orderBy('date', 'asc')
       );
-      
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      
+
+      const querySnapshot = await getDocs(q);
+      const appointments: Appointment[] = [];
+
       // Get all users for this company to map IDs to names
       const usersQuery = query(
         collection(db, 'users'),
@@ -332,55 +313,59 @@ export default function AdminHomePage() {
         const stallData = doc.data();
         stallsMap.set(doc.id, stallData.name || `Stall ${doc.id.substring(0, 4)}`);
       });
-      
-      const appointments: Appointment[] = [];
-      
-      appointmentsSnapshot.forEach(doc => {
-        const data = doc.data();
-        const stallName = stallsMap.get(data.stallId) || `Stall ${data.stallId.substring(0, 4)}`;
-        const userName = usersMap.get(data.userId) || `User ${data.userId.substring(0, 4)}`;
+
+      for (const doc of querySnapshot.docs) {
+        const appointmentData = doc.data();
+        const stallName = stallsMap.get(appointmentData.stallId) || `Stall ${appointmentData.stallId.substring(0, 4)}`;
+        const userName = usersMap.get(appointmentData.userId) || `User ${appointmentData.userId.substring(0, 4)}`;
         
-        appointments.push({
+        const appointment: Appointment = {
           id: doc.id,
-          userId: data.userId,
-          companyId: data.companyId,
-          serviceType: data.serviceType,
-          date: data.date.toDate(),
-          startTime: data.startTime,
-          endTime: data.endTime,
-          status: data.status,
-          stallId: data.stallId,
+          userId: appointmentData.userId,
+          companyId: appointmentData.companyId,
+          serviceType: appointmentData.serviceType,
+          date: appointmentData.date.toDate(),
+          startTime: appointmentData.startTime,
+          endTime: appointmentData.endTime,
+          status: appointmentData.status,
+          stallId: appointmentData.stallId,
           stallName: stallName,
           userName: userName,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate()
+          createdAt: appointmentData.createdAt.toDate(),
+          updatedAt: appointmentData.updatedAt.toDate()
+        };
+        appointments.push(appointment);
+      }
+
+      // Group appointments by date
+      const groupedAppointments = appointments.reduce((acc, appointment) => {
+        const date = appointment.date.toISOString().split('T')[0];
+        if (!acc[date]) {
+          acc[date] = [];
+        }
+        acc[date].push(appointment);
+        return acc;
+      }, {} as GroupedAppointments);
+
+      // Sort appointments within each date by time
+      Object.keys(groupedAppointments).forEach(date => {
+        groupedAppointments[date].sort((a, b) => {
+          const [hoursA, minutesA] = a.startTime.split(':').map(Number);
+          const [hoursB, minutesB] = b.startTime.split(':').map(Number);
+          
+          const timeA = new Date(date);
+          timeA.setHours(hoursA, minutesA, 0, 0);
+          
+          const timeB = new Date(date);
+          timeB.setHours(hoursB, minutesB, 0, 0);
+          
+          return timeA.getTime() - timeB.getTime();
         });
       });
-      
-      setFutureAppointments(appointments);
-      
-      // Group appointments by date and user
-      const grouped: GroupedAppointments = {};
-      
-      appointments.forEach(appointment => {
-        const dateStr = format(appointment.date, 'yyyy-MM-dd');
-        
-        if (!grouped[dateStr]) {
-          grouped[dateStr] = {};
-        }
-        
-        if (!grouped[dateStr][appointment.userId]) {
-          grouped[dateStr][appointment.userId] = [];
-        }
-        
-        grouped[dateStr][appointment.userId].push(appointment);
-      });
-      
-      setGroupedAppointments(grouped);
+
+      setFutureAppointments(groupedAppointments);
     } catch (error) {
       console.error('Error fetching future appointments:', error);
-    } finally {
-      setIsLoadingAppointments(false);
     }
   };
   
@@ -540,56 +525,53 @@ export default function AdminHomePage() {
             <div className="flex justify-center py-8">
               <div className="text-[#ffa300]">Loading appointments...</div>
             </div>
-          ) : Object.keys(groupedAppointments).length === 0 ? (
+          ) : Object.keys(futureAppointments).length === 0 ? (
             <div className="bg-[#3e2802] rounded-lg p-6 text-center">
               <p className="text-[#ffa300]">No appointments found for the selected date range.</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {Object.keys(groupedAppointments).sort().map(dateStr => (
+              {Object.keys(futureAppointments).sort().map(dateStr => (
                 <div key={dateStr} className="bg-[#3e2802] rounded-lg overflow-hidden">
                   <div className="bg-[#2a1c01] p-4">
                     <h3 className="text-lg font-semibold text-[#ffa300]">{formatDateDisplay(dateStr)}</h3>
                   </div>
                   <div className="p-4">
-                    {Object.keys(groupedAppointments[dateStr]).map(userId => (
-                      <div key={userId} className="mb-6 last:mb-0">
+                    {futureAppointments[dateStr].map(appointment => (
+                      <div key={appointment.id} className="mb-6 last:mb-0">
                         <h4 className="text-md font-medium text-[#ffa300] mb-2">
-                          {groupedAppointments[dateStr][userId][0].userName}
+                          {appointment.userName}
                         </h4>
                         <div className="space-y-2">
-                          {groupedAppointments[dateStr][userId].map(appointment => (
-                            <div 
-                              key={appointment.id} 
-                              className="flex items-center justify-between bg-[#1e1b1b] p-3 rounded-md cursor-pointer hover:bg-[#2a1c01] transition-colors duration-200"
-                              onClick={() => handleAppointmentClick(appointment)}
-                            >
-                              <div className="flex items-center space-x-3">
-                                {getServiceIcon(appointment.serviceType)}
-                                <div>
-                                  <p className="text-[#ffa300] font-medium capitalize">
-                                    {appointment.serviceType}
-                                  </p>
-                                  <p className="text-sm text-gray-400">
-                                    {appointment.startTime} - {appointment.endTime}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm text-gray-400">
-                                  {appointment.stallName}
+                          <div 
+                            className="flex items-center justify-between bg-[#1e1b1b] p-3 rounded-md cursor-pointer hover:bg-[#2a1c01] transition-colors duration-200"
+                            onClick={() => handleAppointmentClick(appointment)}
+                          >
+                            <div className="flex items-center space-x-3">
+                              {getServiceIcon(appointment.serviceType)}
+                              <div>
+                                <p className="text-[#ffa300] font-medium capitalize">
+                                  {appointment.serviceType}
                                 </p>
-                                <p className={`text-xs ${
-                                  appointment.status === 'scheduled' ? 'text-blue-400' :
-                                  appointment.status === 'in_progress' ? 'text-green-400' :
-                                  appointment.status === 'completed' ? 'text-gray-400' :
-                                  'text-red-400'
-                                }`}>
-                                  {appointment.status.replace('_', ' ')}
+                                <p className="text-sm text-gray-400">
+                                  {appointment.startTime} - {appointment.endTime}
                                 </p>
                               </div>
                             </div>
-                          ))}
+                            <div className="text-right">
+                              <p className="text-sm text-gray-400">
+                                {appointment.stallName}
+                              </p>
+                              <p className={`text-xs ${
+                                appointment.status === 'scheduled' ? 'text-blue-400' :
+                                appointment.status === 'in_progress' ? 'text-green-400' :
+                                appointment.status === 'completed' ? 'text-gray-400' :
+                                'text-red-400'
+                              }`}>
+                                {appointment.status.replace('_', ' ')}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
