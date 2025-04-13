@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc, writeBatch, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Appointment, AppointmentWithDetails, HistoricalAppointment, AppointmentStatus } from '@/types/appointment';
 import { Company } from '@/types/company';
@@ -15,6 +15,7 @@ import { signOut, updateEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { toast } from 'react-hot-toast';
 import { HaircutAvailability } from '@/types/haircutAvailability';
+import Notifications from '../components/Notifications';
 
 // Profile Edit Modal Component
 function ProfileEditModal({ 
@@ -692,7 +693,7 @@ export default function UserDashboardPage() {
   const [selectedTime, setSelectedTime] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'past' | 'messages'>('upcoming');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -940,6 +941,27 @@ export default function UserDashboardPage() {
 
     calculateAvailableSlots();
   }, [selectedDate, selectedServiceType, userCompany, companyStalls, companyTrailers, appointments, userLocation]);
+
+  const [userMessages, setUserMessages] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!user?.id || activeTab !== 'messages') return;
+
+      const q = query(
+        collection(db, 'users', user.id, 'notifications'),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setUserMessages(messages);
+    };
+
+    fetchMessages();
+  }, [user, activeTab]);
 
   // Modify the appointment fetching logic
   const fetchAppointments = async () => {
@@ -1309,6 +1331,8 @@ export default function UserDashboardPage() {
   };
 
   return (
+    <>
+    <Notifications />
     <div className="min-h-screen bg-[#1e1b1b]">
       {/* Profile Edit Modal */}
       <ProfileEditModal
@@ -1361,8 +1385,40 @@ export default function UserDashboardPage() {
               >
                 Past
               </button>
+              <button
+                onClick={() => setActiveTab('messages')}
+                className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
+                  activeTab === 'messages'
+                    ? 'border-[#3e2802] text-[#3e2802]'
+                    : 'border-transparent text-[#3e2802] hover:text-[#2a1c01] hover:border-[#2a1c01]'
+                }`}
+                >
+                  Messages
+                </button>
             </nav>
           </div>
+
+          {activeTab === 'messages' && (
+            <div className="space-y-4">
+              {userMessages.length === 0 ? (
+                <p className="text-white">No messages yet.</p>
+              ) : (
+                userMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="bg-[#3e2802] text-white border border-[#ffa300] rounded p-4"
+                  >
+                    <p className="font-medium">{msg.message}</p>
+                    <p className="text-sm text-gray-300 mt-1">
+                      {msg.createdAt?.toDate
+                        ? msg.createdAt.toDate().toLocaleString()
+                        : ''}
+                    </p>
+                  </div>
+                ))
+              )}
+          </div>
+        )}
           
           {sortedDates.length > 0 ? (
             <div className="space-y-6">
@@ -1498,6 +1554,7 @@ export default function UserDashboardPage() {
         />
       )}
     </div>
+    </>
   );
 }
 

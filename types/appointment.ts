@@ -8,6 +8,7 @@ export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'mis
 export interface Appointment {
   id: string;
   userId: string;
+  fcmToken?: string;
   companyId: string;
   stallId: string;
   trailerId: string;
