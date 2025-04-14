@@ -29,6 +29,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { useSearchParams } from 'next/navigation';
 import { useAdminGuard } from '../hooks/useAdminGuard';
+import SendMessageForm from '@/app/components/SendMessageForm';
 
 interface Company {
   id: string;
@@ -461,7 +462,8 @@ const StallGrid: React.FC<StallGridProps> = ({
               </div>
             </div>
             
-            <div className="mt-6 flex justify-end space-x-2">
+            <div className="mt-6">
+              <div className="grid grid-cols-3 gap-4">
               {selectedGridAppointment.status === 'scheduled' && (
                 <button 
                   onClick={() => {
@@ -510,78 +512,18 @@ const StallGrid: React.FC<StallGridProps> = ({
                 </button>
               )}
               <button
-                onClick={() => setShowMessageForm(!showMessageForm)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                Send Message
-              </button>
-              <button 
                 onClick={() => setSelectedGridAppointment(null)}
                 className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
               >
                 Close
               </button>
             </div>
-            {showMessageForm && (
-              <div className="mt-4">
-                <textarea
-                  className="w-full p-3 bg-[#fff8dc] text-black placeholder-gray-700 border rounded"
-                  placeholder="Enter your message..."
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  rows={3}
-                />
-                <button
-                  onClick={async () => {
-                    setSendingMessage(true);
-                    try {
-                      const userRef = doc(db, 'users', selectedGridAppointment.userId);
-                      const userSnap = await getDoc(userRef);
-                      const userData = userSnap.data();
-
-                      if (!userSnap.exists() || !userData?.fcmToken) {
-                        alert('This user does not have a registered FCM token.');
-                        setSendingMessage(false);
-                        return;
-                      }
-
-                      const fcmToken = userData.fcmToken;
-                      console.log('Using FCM token:', fcmToken);
-                      // Send notification
-                      const res = await fetch('https://us-central1-beheardqueue.cloudfunctions.net/sendNotification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          token: fcmToken,
-                          userId: selectedGridAppointment.userId,
-                          title: 'Message from BeHeard',
-                          body: messageText,
-                        }),
-                      });
-                      const result = await res.json();
-                      if (result.success) {
-                        alert('Message sent!');
-                        setMessageText('');
-                        setShowMessageForm(false);
-                      } else {
-                        alert('Failed to send message.');
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      alert('Error sending message.');
-                    } finally {
-                      setSendingMessage(false);
-                    }
-                  }}
-                  disabled={sendingMessage || !messageText.trim()}
-                  className="mt-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-                >
-                  {sendingMessage ? 'Sending...' : 'Send'}
-                </button>
-              </div>
-            )}
+            <div className="mt-4 col-span-3">
+              <SendMessageForm userId={selectedGridAppointment.userId} />
+            </div>
           </div>
         </div>
+      </div>
       )}
     </>
   );

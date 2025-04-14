@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc, writeBatch, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, Timestamp, updateDoc, doc, getDoc, writeBatch, orderBy, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Appointment, AppointmentWithDetails, HistoricalAppointment, AppointmentStatus } from '@/types/appointment';
 import { Company } from '@/types/company';
@@ -1187,6 +1187,19 @@ export default function UserDashboardPage() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!user?.id) return;
+  
+    try {
+      await deleteDoc(doc(db, 'users', user.id, 'notifications', messageId));
+      setUserMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+      toast.error('Could not delete message. Please try again.');
+    }
+  };
+  
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -1408,17 +1421,27 @@ export default function UserDashboardPage() {
                     key={msg.id}
                     className="bg-[#3e2802] text-white border border-[#ffa300] rounded p-4"
                   >
-                    <p className="font-medium">{msg.message}</p>
-                    <p className="text-sm text-gray-300 mt-1">
-                      {msg.createdAt?.toDate
-                        ? msg.createdAt.toDate().toLocaleString()
-                        : ''}
-                    </p>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">{msg.message}</p>
+                        <p className="text-sm text-gray-300 mt-1">
+                          {msg.createdAt?.toDate
+                            ? msg.createdAt.toDate().toLocaleString()
+                            : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        className="text-red-500 font-bold hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
-          </div>
-        )}
+            </div>
+          )}
           
           {sortedDates.length > 0 ? (
             <div className="space-y-6">
