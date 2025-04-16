@@ -1,3 +1,5 @@
+// TEMPORARILY DISABLED TO PREVENT BUILD ERROR
+
 /**
  * Import function triggers from their respective submodules:
  *
@@ -14,7 +16,7 @@
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");
 // });
-
+/*
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import * as corsLib from 'cors';
@@ -64,3 +66,5 @@ export const sendNotification = functions.https.onRequest((req, res) => {
         }
     });
 });
+
+*/
