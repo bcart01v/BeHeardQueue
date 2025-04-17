@@ -29,6 +29,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { useSearchParams } from 'next/navigation';
 import { useAdminGuard } from '../hooks/useAdminGuard';
+import SendMessageForm from '@/app/components/SendMessageForm';
 
 interface Company {
   id: string;
@@ -163,13 +164,16 @@ const StallGrid: React.FC<StallGridProps> = ({
   onTimeSlotSelect,
   onStallStatusChange
 }) => {
-  const [selectedGridAppointment, setSelectedGridAppointment] = useState<Appointment | null>(null);
+  const [selectedGridAppointment, setSelectedGridAppointment] = useState<Appointment & { fcmToken?: string } | null>(null);
   const [showStatusMenuStallId, setShowStatusMenuStallId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const timeSlotsRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState<string>(getCurrentTimeString());
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [currentTimeIndex, setCurrentTimeIndex] = useState<number>(-1);
+  const [showMessageForm, setShowMessageForm] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   // Filter stalls based on service type and selected trailer
   const filteredStalls = stalls.filter(stall => 
@@ -458,7 +462,8 @@ const StallGrid: React.FC<StallGridProps> = ({
               </div>
             </div>
             
-            <div className="mt-6 flex justify-end space-x-2">
+            <div className="mt-6">
+              <div className="grid grid-cols-3 gap-4">
               {selectedGridAppointment.status === 'scheduled' && (
                 <button 
                   onClick={() => {
@@ -506,15 +511,19 @@ const StallGrid: React.FC<StallGridProps> = ({
                   Cancel Service
                 </button>
               )}
-              <button 
+              <button
                 onClick={() => setSelectedGridAppointment(null)}
                 className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
               >
                 Close
               </button>
             </div>
+            <div className="mt-4 col-span-3">
+              <SendMessageForm userId={selectedGridAppointment.userId} />
+            </div>
           </div>
         </div>
+      </div>
       )}
     </>
   );
