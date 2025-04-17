@@ -10,7 +10,7 @@ import { User } from '@/types/user';
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const companyId = searchParams.get('companyId');
+  const companyId = searchParams.get('companyId') || '7CHBsxVGqC353T7pA2xg';
   
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -32,12 +32,27 @@ function SignupForm() {
         
         if (companyDoc.exists()) {
           setCompanyName(companyDoc.data().name);
+          setCompanyNotFound(false);
         } else {
-          setCompanyNotFound(true);
+          // Only show company not found error if it's not the default company ID
+          if (companyId !== '7CHBsxVGqC353T7pA2xg') {
+            setCompanyNotFound(true);
+          } else {
+            // For default company, just set a generic name
+            setCompanyName('BeHeard');
+            setCompanyNotFound(false);
+          }
         }
       } catch (error) {
         console.error('Error fetching company details:', error);
-        setCompanyNotFound(true);
+        // Only show company not found error if it's not the default company ID
+        if (companyId !== '7CHBsxVGqC353T7pA2xg') {
+          setCompanyNotFound(true);
+        } else {
+          // For default company, just set a generic name
+          setCompanyName('BeHeard');
+          setCompanyNotFound(false);
+        }
       }
     };
 
@@ -61,11 +76,6 @@ function SignupForm() {
     
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
-      return;
-    }
-    
-    if (!companyId) {
-      setError('Company ID is required. Please use a valid signup link.');
       return;
     }
     
@@ -111,13 +121,13 @@ function SignupForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#1e1b1b] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-black">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-[#ffffff]">
           Create your account
         </h2>
         {companyName && (
-          <p className="mt-2 text-center text-sm text-black">
+          <p className="mt-2 text-center text-sm text-[#ffffff]">
             Signing up for {companyName}
           </p>
         )}
@@ -129,7 +139,7 @@ function SignupForm() {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-[#ffa300] py-8 px-4 shadow sm:rounded-lg sm:px-10">
           {error && (
             <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
               {error}
@@ -139,7 +149,7 @@ function SignupForm() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-black">
+                <label htmlFor="firstName" className="block text-sm font-medium text-[#3e2802]">
                   First Name
                 </label>
                 <div className="mt-1">
@@ -150,13 +160,13 @@ function SignupForm() {
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black"
+                    className="appearance-none block w-full px-3 py-2 border border-[#3e2802] rounded-md shadow-sm placeholder-[#3e2802] focus:outline-none focus:ring-[#3e2802] focus:border-[#3e2802] sm:text-sm text-[#3e2802] bg-[#ffffff]"
                   />
                 </div>
               </div>
               
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-black">
+                <label htmlFor="lastName" className="block text-sm font-medium text-[#3e2802]">
                   Last Name
                 </label>
                 <div className="mt-1">
@@ -167,14 +177,14 @@ function SignupForm() {
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black"
+                    className="appearance-none block w-full px-3 py-2 border border-[#3e2802] rounded-md shadow-sm placeholder-[#3e2802] focus:outline-none focus:ring-[#3e2802] focus:border-[#3e2802] sm:text-sm text-[#3e2802] bg-[#ffffff]"
                   />
                 </div>
               </div>
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-black">
+              <label htmlFor="email" className="block text-sm font-medium text-[#3e2802]">
                 Email address
               </label>
               <div className="mt-1">
@@ -186,13 +196,13 @@ function SignupForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black"
+                  className="appearance-none block w-full px-3 py-2 border border-[#3e2802] rounded-md shadow-sm placeholder-[#3e2802] focus:outline-none focus:ring-[#3e2802] focus:border-[#3e2802] sm:text-sm text-[#3e2802] bg-[#ffffff]"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-black">
+              <label htmlFor="password" className="block text-sm font-medium text-[#3e2802]">
                 Password
               </label>
               <div className="mt-1">
@@ -204,13 +214,13 @@ function SignupForm() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black"
+                  className="appearance-none block w-full px-3 py-2 border border-[#3e2802] rounded-md shadow-sm placeholder-[#3e2802] focus:outline-none focus:ring-[#3e2802] focus:border-[#3e2802] sm:text-sm text-[#3e2802] bg-[#ffffff]"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-black">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-[#3e2802]">
                 Confirm Password
               </label>
               <div className="mt-1">
@@ -222,7 +232,7 @@ function SignupForm() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black"
+                  className="appearance-none block w-full px-3 py-2 border border-[#3e2802] rounded-md shadow-sm placeholder-[#3e2802] focus:outline-none focus:ring-[#3e2802] focus:border-[#3e2802] sm:text-sm text-[#3e2802] bg-[#ffffff]"
                 />
               </div>
             </div>
@@ -231,7 +241,7 @@ function SignupForm() {
               <button
                 type="submit"
                 disabled={isLoading || companyNotFound}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-[#ffa300] bg-[#3e2802] hover:bg-[#2a1c01] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3e2802] disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 {isLoading ? 'Creating account...' : 'Sign up'}
               </button>
@@ -241,10 +251,10 @@ function SignupForm() {
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+                <div className="w-full border-t border-[#3e2802]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-black">
+                <span className="px-2 bg-[#ffa300] text-[#3e2802]">
                   Already have an account?
                 </span>
               </div>
@@ -253,7 +263,7 @@ function SignupForm() {
             <div className="mt-6">
               <a
                 href="/login"
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-black bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full flex justify-center py-2 px-4 border border-[#3e2802] rounded-md shadow-sm text-sm font-medium text-[#3e2802] bg-[#ffffff] hover:bg-[#3e2802] hover:text-[#ffa300] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3e2802] transition-colors duration-200"
               >
                 Log in
               </a>
@@ -268,9 +278,9 @@ function SignupForm() {
 // Loading fallback component
 function SignupFormFallback() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#1e1b1b] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-black">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-[#ffffff]">
           Loading...
         </h2>
       </div>

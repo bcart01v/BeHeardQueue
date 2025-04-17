@@ -13,7 +13,7 @@ import { createBubbleUser } from '@/lib/bubble';
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const companyId = searchParams.get('companyId');
+  const companyId = searchParams.get('companyId') || '7CHBsxVGqC353T7pA2xg';
   
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -36,12 +36,27 @@ function RegisterForm() {
         
         if (companyDoc.exists()) {
           setCompanyName(companyDoc.data().name);
+          setCompanyNotFound(false);
         } else {
-          setCompanyNotFound(true);
+          // Only show company not found error if it's not the default company ID
+          if (companyId !== '7CHBsxVGqC353T7pA2xg') {
+            setCompanyNotFound(true);
+          } else {
+            // For default company, just set a generic name
+            setCompanyName('BeHeard');
+            setCompanyNotFound(false);
+          }
         }
       } catch (error) {
         console.error('Error fetching company details:', error);
-        setCompanyNotFound(true);
+        // Only show company not found error if it's not the default company ID
+        if (companyId !== '7CHBsxVGqC353T7pA2xg') {
+          setCompanyNotFound(true);
+        } else {
+          // For default company, just set a generic name
+          setCompanyName('BeHeard');
+          setCompanyNotFound(false);
+        }
       }
     };
 
@@ -61,8 +76,8 @@ function RegisterForm() {
         return;
       }
 
-      // Validate company exists
-      if (!companyId || companyNotFound) {
+      // Validate company exists - only if it's not the default company
+      if (companyId !== '7CHBsxVGqC353T7pA2xg' && (!companyId || companyNotFound)) {
         setError('Invalid company link');
         setIsLoading(false);
         return;

@@ -3,7 +3,7 @@ import { User } from '@/types/user';
 import { Stall } from '@/types/stall';
 import { Trailer } from '@/types/trailer';
 
-export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'missed' | 'cancelled';
+export type AppointmentStatus = 'scheduled' | 'in-progress' | 'completed' | 'missed' | 'cancelled' | 'checked-in';
 
 export interface Appointment {
   id: string;
@@ -16,6 +16,7 @@ export interface Appointment {
   endTime: string;
   status: AppointmentStatus;
   serviceType: 'shower' | 'laundry' | 'haircut';
+  duration: number;
   createdAt: Date;
   updatedAt: Date;
 }
