@@ -17,6 +17,36 @@ import { toast } from 'react-hot-toast';
 import { HaircutAvailability } from '@/types/haircutAvailability';
 import Notifications from '../components/Notifications';
 
+interface TimeSlot {
+  time: string;
+  stallId: string;
+  trailerId: string;
+  duration: number;
+  bufferTime: number;
+}
+
+interface TimeSlotAppointment {
+  date: Date;
+  startTime: string;
+  endTime: string;
+  stallId: string;
+  trailerId: string;
+  duration: number;
+}
+
+interface BookingFormProps {
+  onClose: () => void;
+  onSubmit: (appointment: TimeSlotAppointment) => void;
+  availableTimeSlots: TimeSlot[];
+  selectedDate: Date | null;
+  setSelectedDate: (date: Date | null) => void;
+  selectedServiceType: ServiceType | null;
+  setSelectedServiceType: (type: ServiceType | null) => void;
+  userCompany: Company | null;
+  isLoading: boolean;
+  userLocation: { lat: number; lng: number } | null;
+}
+
 // Profile Edit Modal Component
 function ProfileEditModal({ 
   isOpen, 
@@ -204,25 +234,8 @@ function BookingForm({
   userCompany,
   isLoading,
   userLocation
-}: { 
-  onClose: () => void; 
-  onSubmit: (appointment: Partial<Appointment>) => void; 
-  availableTimeSlots: { time: string; stallId: string; trailerId: string; duration: number; bufferTime: number }[]; 
-  selectedDate: Date | null; 
-  setSelectedDate: (date: Date | null) => void; 
-  selectedServiceType: ServiceType | null; 
-  setSelectedServiceType: (type: ServiceType | null) => void;
-  userCompany: Company | null;
-  isLoading: boolean;
-  userLocation: { lat: number; lng: number } | null;
-}) {
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<{
-    time: string;
-    stallId: string;
-    trailerId: string;
-    duration: number;
-    bufferTime: number;
-  } | null>(null);
+}: BookingFormProps) {
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [availableStalls, setAvailableStalls] = useState<Stall[]>([]);
   const [availableTrailers, setAvailableTrailers] = useState<Trailer[]>([]);
@@ -254,7 +267,6 @@ function BookingForm({
         setAvailableStalls(stalls);
 
         if (stalls.length === 0) {
-          console.log('No stalls found for service type:', selectedServiceType);
           setAvailableTrailers([]);
           return;
         }
@@ -350,17 +362,9 @@ function BookingForm({
     }
   }, [selectedTimeSlot]);
 
-  const validateTimeSlot = async (timeSlot: {
-    time: string;
-    stallId: string;
-    trailerId: string;
-    duration: number;
-    bufferTime: number;
-  }) => {
+  const validateTimeSlot = async (timeSlot: TimeSlot) => {
     if (!selectedDate || !userCompany) return false;
 
-    console.log('Validating time slot:', timeSlot);
-    console.log('Selected date for validation:', selectedDate);
 
     // Get stall data
     const stallDoc = await getDoc(doc(db, 'stalls', timeSlot.stallId));
@@ -370,17 +374,14 @@ function BookingForm({
     }
 
     const stall = stallDoc.data() as Stall;
-    console.log('Stall data:', stall);
 
     // Check if stall is available
     if (stall.status !== 'available') {
-      console.log('Stall is not available');
       return false;
     }
 
     // Check if stall belongs to the user's company
     if (stall.companyId !== userCompany.id) {
-      console.log('Stall does not belong to user company');
       return false;
     }
 
@@ -391,14 +392,8 @@ function BookingForm({
     const selectedDateNoon = new Date(selectedDate);
     selectedDateNoon.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
 
-    console.log('Date comparison:', {
-      today: today.toISOString(),
-      selectedDate: selectedDateNoon.toISOString(),
-      isSameDay: isSameDay(today, selectedDateNoon)
-    });
 
     if (selectedDateNoon < today && !isSameDay(today, selectedDateNoon)) {
-      console.log('Selected date is in the past');
       return false;
     }
 
@@ -410,12 +405,9 @@ function BookingForm({
     }
 
     const trailer = trailerDoc.data() as Trailer;
-    console.log('Trailer data:', trailer);
 
     // Check if stall belongs to the selected trailer
     if (stall.trailerGroup !== timeSlot.trailerId) {
-      console.log('Stall does not belong to selected trailer');
-      console.log('Stall trailer group:', stall.trailerGroup, 'vs selected trailer ID:', timeSlot.trailerId);
       return false;
     }
 
@@ -428,7 +420,6 @@ function BookingForm({
       period,
       original: timeSlot.time
     };
-    console.log('Parsed time:', parsedTime);
 
     // Create Date objects for comparison
     const appointmentStartTime = new Date(selectedDate);
@@ -443,17 +434,8 @@ function BookingForm({
     const trailerEndTime = new Date(selectedDate);
     trailerEndTime.setHours(endHour, endMinute, 0, 0);
 
-    console.log('Time comparison:', {
-      appointmentStartTime: appointmentStartTime.toLocaleTimeString(),
-      trailerStartTime: trailerStartTime.toLocaleTimeString(),
-      trailerEndTime: trailerEndTime.toLocaleTimeString(),
-      isBeforeStart: appointmentStartTime < trailerStartTime,
-      isAfterEnd: appointmentStartTime > trailerEndTime
-    });
-
     // Check if the appointment time is within the trailer's operating hours
     if (appointmentStartTime < trailerStartTime || appointmentStartTime > trailerEndTime) {
-      console.log('Appointment time is outside trailer operating hours');
       return false;
     }
 
@@ -467,11 +449,9 @@ function BookingForm({
     );
 
     if (existingBookings.length > 0) {
-      console.log('Time slot conflicts with existing bookings');
       return false;
     }
 
-    console.log('Time slot is valid:', timeSlot);
     return true;
   };
 
@@ -484,15 +464,13 @@ function BookingForm({
     }
 
     // Create appointment object
-    const appointment: Partial<Appointment> = {
+    const appointment: TimeSlotAppointment = {
       date: selectedDate,
       startTime: selectedTimeSlot.time,
       endTime: addMinutesToTime(selectedTimeSlot.time, selectedTimeSlot.duration),
       stallId: selectedTimeSlot.stallId,
       trailerId: selectedTimeSlot.trailerId,
-      status: 'scheduled',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      duration: selectedTimeSlot.duration
     };
 
     onSubmit(appointment);
@@ -582,7 +560,6 @@ function BookingForm({
                     const date = new Date(year, month - 1, day);
                     // Set the time to noon to avoid any timezone issues
                     date.setHours(12, 0, 0, 0);
-                    console.log('Selected date:', date);
                     setSelectedDate(date);
                   } else {
                     setSelectedDate(null);
@@ -630,7 +607,7 @@ function BookingForm({
                     }`}
                     disabled={isValidating}
                   >
-                    {slot.time}
+                    {formatTimeForDisplay(slot.time)}
                   </button>
                 ))}
               </div>
@@ -677,13 +654,7 @@ export default function UserDashboardPage() {
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<{
-    time: string;
-    stallId: string;
-    trailerId: string;
-    duration: number;
-    bufferTime: number;
-  }[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([]);
   const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userCompany, setUserCompany] = useState<Company | null>(null);
@@ -697,6 +668,10 @@ export default function UserDashboardPage() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isManualTabSwitch, setIsManualTabSwitch] = useState(false);
+
+  const statusArray: AppointmentStatus[] = ['scheduled', 'in_progress'];
+  const completedStatusArray: AppointmentStatus[] = ['cancelled', 'completed', 'missed'];
 
   // Get user's location when component mounts
   useEffect(() => {
@@ -761,7 +736,8 @@ export default function UserDashboardPage() {
             const appointmentsQuery = query(
               collection(db, 'appointments'),
               where('userId', '==', user.id),
-              where('status', 'in', ['scheduled', 'in_progress', 'completed', 'missed', 'cancelled'])
+              where('status', 'in', ['scheduled', 'in_progress', 'checked-in'] as AppointmentStatus[]),
+              where('date', '>=', Timestamp.fromDate(new Date()))
             );
             const appointmentsSnapshot = await getDocs(appointmentsQuery);
             const appointmentsData = await Promise.all(appointmentsSnapshot.docs.map(async (doc) => {
@@ -780,12 +756,6 @@ export default function UserDashboardPage() {
                 ? appointmentData.date.toDate()
                 : new Date(appointmentData.date);
               
-              console.log('Date conversion:', {
-                original: appointmentData.date,
-                firestoreDate: firestoreDate.toISOString(),
-                localDate: firestoreDate.toLocaleDateString(),
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-              });
 
               // Create a new date object preserving the local date
               const date = new Date(
@@ -797,11 +767,6 @@ export default function UserDashboardPage() {
                 0,
                 0
               );
-              
-              console.log('Final date:', {
-                date: date.toISOString(),
-                localDate: date.toLocaleDateString()
-              });
               
               return {
                 id: doc.id,
@@ -833,17 +798,10 @@ export default function UserDashboardPage() {
     if (!selectedDate || !selectedServiceType || !userCompany) return;
 
     const calculateAvailableSlots = async () => {
-      const availableSlots: {
-        time: string;
-        stallId: string;
-        trailerId: string;
-        duration: number;
-        bufferTime: number;
-      }[] = [];
+      const availableSlots: TimeSlot[] = [];
 
       // Format the selected date for comparison
       const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-      console.log('Calculating slots for date:', selectedDateStr);
 
       // Get all available stalls for the selected service type
       const availableStalls = companyStalls.filter(stall => 
@@ -875,12 +833,6 @@ export default function UserDashboardPage() {
 
         const endTime = new Date(selectedDate);
         endTime.setHours(endHour, endMinute, 0, 0);
-
-        console.log('Trailer operating hours:', {
-          startTime: startTime.toLocaleTimeString(),
-          endTime: endTime.toLocaleTimeString()
-        });
-
         // Get stalls for this trailer
         const trailerStalls = availableStalls.filter(stall => stall.trailerGroup === trailer.id);
         
@@ -896,8 +848,8 @@ export default function UserDashboardPage() {
 
           let currentTime = startTime;
           while (currentTime < endTime) {
-            // Format time in 12-hour format with AM/PM
-            const timeSlot = format(currentTime, 'h:mm a');
+            // Format time in 24-hour format
+            const timeSlot = format(currentTime, 'HH:mm');
             
             // Check if this time slot is already booked for this specific stall
             const isBooked = appointments.length > 0 && appointments.some(appointment => {
@@ -968,26 +920,33 @@ export default function UserDashboardPage() {
     if (!currentUser?.id) return;
     
     try {
-      // Fetch current appointments
-      const currentQuery = query(
-        collection(db, 'appointments'),
-        where('userId', '==', currentUser.id),
-        where('status', 'in', ['scheduled', 'in_progress'] as AppointmentStatus[])
-      );
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Create base query for the user's appointments
+      let appointmentsQuery;
       
-      // Fetch historical appointments if viewing past tab
-      const historyQuery = activeTab === 'past' ? query(
-        collection(db, 'appointment_history'),
-        where('userId', '==', currentUser.id)
-      ) : null;
+      if (activeTab === 'upcoming') {
+        // For upcoming tab: get active appointments (scheduled, in_progress, checked-in)
+        appointmentsQuery = query(
+          collection(db, 'appointments'),
+          where('userId', '==', currentUser.id),
+          where('status', 'in', ['scheduled', 'in_progress', 'checked-in'] as AppointmentStatus[]),
+          where('date', '>=', Timestamp.fromDate(today))
+        );
+      } else {
+        // For past tab: get all appointments before today OR with completed/cancelled/missed status
+        appointmentsQuery = query(
+          collection(db, 'appointments'),
+          where('userId', '==', currentUser.id),
+          where('status', 'in', ['completed', 'cancelled', 'missed'] as AppointmentStatus[])
+        );
+      }
+
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
       
-      const [currentSnapshot, historySnapshot] = await Promise.all([
-        getDocs(currentQuery),
-        historyQuery ? getDocs(historyQuery) : null
-      ]);
-      
-      // Process current appointments
-      const currentAppointments = await Promise.all(currentSnapshot.docs.map(async docSnapshot => {
+      // Process appointments
+      const processedAppointments = await Promise.all(appointmentsSnapshot.docs.map(async docSnapshot => {
         const data = docSnapshot.data();
         const [stallDoc, trailerDoc] = await Promise.all([
           getDoc(doc(db, 'stalls', data.stallId as string)),
@@ -1003,33 +962,12 @@ export default function UserDashboardPage() {
           user: currentUser
         } as AppointmentWithDetails;
       }));
+
+      // Set appointments state with the processed appointments
+      setAppointments(processedAppointments);
       
-      // Process historical appointments if needed
-      const historicalAppointments = historySnapshot ? await Promise.all(
-        historySnapshot.docs.map(async docSnapshot => {
-          const data = docSnapshot.data();
-          const [stallDoc, trailerDoc] = await Promise.all([
-            getDoc(doc(db, 'stalls', data.stallId as string)),
-            getDoc(doc(db, 'trailers', data.trailerId as string))
-          ]);
-          
-          return {
-            id: docSnapshot.id,
-            ...data,
-            date: data.date.toDate(),
-            stall: stallDoc.exists() ? stallDoc.data() as Stall : null,
-            trailer: trailerDoc.exists() ? trailerDoc.data() as Trailer : null,
-            user: currentUser
-          } as AppointmentWithDetails;
-        })
-      ) : [];
-      
-      // Combine and set appointments based on active tab
-      const allAppointments = activeTab === 'upcoming'
-        ? currentAppointments
-        : historicalAppointments;
-      
-      setAppointments(allAppointments);
+      // Log for debugging
+      console.log(`Fetched ${processedAppointments.length} appointments for ${activeTab} tab`);
     } catch (error) {
       console.error('Error fetching appointments:', error);
       toast.error('Failed to fetch appointments');
@@ -1038,12 +976,29 @@ export default function UserDashboardPage() {
 
   // Update the useEffect to use the new fetch function
   useEffect(() => {
-    if (!authLoading) {
-      fetchAppointments();
+    if (!authLoading && currentUser?.id) {
+      if (activeTab === 'upcoming' || activeTab === 'past') {
+        fetchAppointments();
+      }
+      // For messages tab, we don't need to fetch appointments
     }
-  }, [user, authLoading, activeTab]);
+  }, [user, authLoading, activeTab, currentUser]);
 
-  const handleBookAppointment = async (appointmentData: Partial<Appointment>) => {
+  // Add a debug effect to track appointments state
+  useEffect(() => {
+  }, [appointments]);
+
+  // Reset the manual tab switch flag after a short delay
+  useEffect(() => {
+    if (isManualTabSwitch) {
+      const timer = setTimeout(() => {
+        setIsManualTabSwitch(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isManualTabSwitch]);
+
+  const handleBookAppointment = async (appointmentData: TimeSlotAppointment) => {
     if (!user || !userCompany) return;
     
     try {
@@ -1055,29 +1010,27 @@ export default function UserDashboardPage() {
       }
       
       // Create a new date object with the correct local timezone
-      const appointmentDate = new Date(appointmentData.date as Date);
+      const appointmentDate = new Date(appointmentData.date);
       
       // Set the time to noon to avoid timezone issues
       appointmentDate.setHours(12, 0, 0, 0);
       
       // Create appointment object
-      const appointment: Omit<Appointment, 'id'> = {
+      const appointment = {
         userId: user.id,
         companyId: userCompany.id,
-        stallId: appointmentData.stallId as string,
-        trailerId: appointmentData.trailerId as string,
+        stallId: appointmentData.stallId,
+        trailerId: appointmentData.trailerId,
         date: appointmentDate,
-        startTime: appointmentData.startTime as string,
-        endTime: appointmentData.endTime as string,
-        status: 'scheduled',
+        startTime: appointmentData.startTime,
+        endTime: appointmentData.endTime,
+        status: 'scheduled' as const,
         serviceType: selectedServiceType,
+        duration: appointmentData.duration,
         createdAt: new Date(),
         updatedAt: new Date()
-      };
+      } as Omit<Appointment, 'id'>;
       
-      console.log('Creating appointment with data:', appointment);
-      console.log('Appointment date before Firestore:', appointmentDate);
-      console.log('Appointment date ISO string:', appointmentDate.toISOString());
       
       // Create Timestamp directly from date components to avoid timezone issues
       const timestamp = Timestamp.fromMillis(appointmentDate.getTime());
@@ -1089,9 +1042,7 @@ export default function UserDashboardPage() {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
-      
-      console.log('Appointment created with ID:', docRef.id);
-      
+            
       // Get the stall and trailer for the appointment
       const stallDoc = await getDoc(doc(db, 'stalls', appointment.stallId));
       const trailerDoc = await getDoc(doc(db, 'trailers', appointment.trailerId));
@@ -1282,20 +1233,27 @@ export default function UserDashboardPage() {
 
   // Filter appointments based on active tab
   const filteredAppointments = appointments.filter(appointment => {
-    // Create dates set to noon to avoid timezone issues
+    // Create dates set to midnight to avoid timezone issues
     const appointmentDate = new Date(appointment.date);
     const today = new Date();
     
-    // Set both dates to noon
-    appointmentDate.setHours(12, 0, 0, 0);
-    today.setHours(12, 0, 0, 0);
+    // Set both dates to midnight
+    appointmentDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
     
     if (activeTab === 'upcoming') {
-      // Show today's appointments in upcoming
-      return appointmentDate >= today;
+      // Show future appointments that are active
+      return (
+        appointmentDate >= today && 
+        statusArray.includes(appointment.status) &&
+        !completedStatusArray.includes(appointment.status)
+      );
     } else {
-      // Past tab should show appointments before today
-      return appointmentDate < today;
+      // Past tab should show appointments before today plus any cancelled/completed/missed
+      return (
+        appointmentDate < today || 
+        completedStatusArray.includes(appointment.status)
+      );
     }
   });
 
@@ -1307,7 +1265,7 @@ export default function UserDashboardPage() {
       appointmentDate.getFullYear(),
       appointmentDate.getMonth(),
       appointmentDate.getDate(),
-      12, // Set to noon to avoid timezone issues
+      0, // Set to midnight to avoid timezone issues
       0,
       0,
       0
@@ -1379,7 +1337,10 @@ export default function UserDashboardPage() {
           <div className="border-b border-[#3e2802] mb-4 sm:mb-6">
             <nav className="flex -mb-px">
               <button
-                onClick={() => setActiveTab('upcoming')}
+                onClick={() => {
+                  setIsManualTabSwitch(true);
+                  setActiveTab('upcoming');
+                }}
                 className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'upcoming'
                     ? 'border-[#3e2802] text-[#3e2802]'
@@ -1389,7 +1350,10 @@ export default function UserDashboardPage() {
                 Upcoming
               </button>
               <button
-                onClick={() => setActiveTab('past')}
+                onClick={() => {
+                  setIsManualTabSwitch(true);
+                  setActiveTab('past');
+                }}
                 className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'past'
                     ? 'border-[#3e2802] text-[#3e2802]'
@@ -1399,7 +1363,9 @@ export default function UserDashboardPage() {
                 Past
               </button>
               <button
-                onClick={() => setActiveTab('messages')}
+                onClick={() => {
+                  setActiveTab('messages');
+                }}
                 className={`py-2 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'messages'
                     ? 'border-[#3e2802] text-[#3e2802]'
@@ -1414,7 +1380,15 @@ export default function UserDashboardPage() {
           {activeTab === 'messages' && (
             <div className="space-y-4">
               {userMessages.length === 0 ? (
-                <p className="text-white">No messages yet.</p>
+                <div className="text-center py-8 sm:py-12">
+                  <div className="bg-[#3e2802] rounded-full p-3 sm:p-4 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-[#ffa300]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm sm:text-base text-[#ffffff] mb-3 sm:mb-4">You don't have any messages yet</p>
+                  <p className="text-xs sm:text-sm text-white-400">When you receive notifications or updates, they will appear here.</p>
+                </div>
               ) : (
                 userMessages.map((msg) => (
                   <div
@@ -1443,121 +1417,124 @@ export default function UserDashboardPage() {
             </div>
           )}
           
-          {sortedDates.length > 0 ? (
-            <div className="space-y-6">
-              {sortedDates.map((date) => (
-                <div key={date} className="border border-[#3e2802] rounded-xl p-3 sm:p-5 bg-[#3e2802]">
-                  <h3 className="text-lg sm:text-xl font-bold text-[#ffffff] mb-3">
-                    {format(parseISO(date), 'MMMM d, yyyy')}
-                  </h3>
-                  <div className="space-y-3">
-                    {groupedAppointments[date].map((appointment) => (
-                      <div 
-                        key={appointment.id} 
-                        className="border border-[#ffa300] rounded-lg p-3 bg-[#2a1c01] hover:shadow-md transition-all duration-300"
-                      >
-                        <div className="flex flex-col space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-base font-medium text-[#ffa300]">
-                              {appointment.stall?.serviceType 
-                                ? appointment.stall.serviceType.charAt(0).toUpperCase() + appointment.stall.serviceType.slice(1)
-                                : 'Service Type Unavailable'}
-                            </h4>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              (() => {
-                                switch(appointment.status as AppointmentStatus) {
-                                  case 'scheduled':
-                                    return 'bg-blue-100 text-blue-800';
-                                  case 'in_progress':
-                                    return 'bg-yellow-100 text-yellow-800';
-                                  case 'completed':
-                                    return 'bg-green-100 text-green-800';
-                                  case 'missed':
-                                    return 'bg-red-100 text-red-800';
-                                  case 'cancelled':
-                                    return 'bg-gray-100 text-gray-800';
-                                  default:
-                                    return 'bg-gray-100 text-gray-800';
-                                }
-                              })()
-                            }`}>
-                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1).replace('_', ' ')}
-                            </span>
-                          </div>
-                          <div className="flex items-center text-sm text-[#ffffff]">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {appointment.startTime}
-                          </div>
-                          <div className="flex items-center text-sm text-[#ffffff]">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {appointment.trailer?.location || 'Location Unavailable'}
-                          </div>
-                          <div className="flex justify-between items-center mt-2">
-                            <button
-                              onClick={() => openGoogleMaps(appointment.trailer?.location || '')}
-                              className="px-2 py-1 bg-[#ffa300] text-[#3e2802] rounded-lg hover:bg-[#ffb733] transition-colors duration-300 flex items-center text-xs"
-                              disabled={!appointment.trailer?.location}
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                              </svg>
-                              Take me there
-                            </button>
-                            {appointment.status === 'scheduled' && (
-                              <button
-                                onClick={() => handleCancelAppointment(appointment.id)}
-                                className="px-2 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors duration-300 flex items-center text-xs"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          {(activeTab === 'upcoming' || activeTab === 'past') && (
+            <>
+              {sortedDates.length > 0 ? (
+                <div className="space-y-6">
+                  {sortedDates.map((date) => (
+                    <div key={date} className="border border-[#3e2802] rounded-xl p-3 sm:p-5 bg-[#3e2802]">
+                      <h3 className="text-lg sm:text-xl font-bold text-[#ffffff] mb-3">
+                        {format(parseISO(date), 'MMMM d, yyyy')}
+                      </h3>
+                      <div className="space-y-3">
+                        {groupedAppointments[date].map((appointment) => (
+                          <div 
+                            key={appointment.id} 
+                            className="border border-[#ffa300] rounded-lg p-3 bg-[#2a1c01] hover:shadow-md transition-all duration-300"
+                          >
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-[#ffa300] font-medium capitalize">{appointment.serviceType}</p>
+                                  <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                                </div>
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  (() => {
+                                    switch(appointment.status as AppointmentStatus) {
+                                      case 'scheduled':
+                                        return 'bg-blue-100 text-blue-800';
+                                      case 'in_progress':
+                                        return 'bg-yellow-100 text-yellow-800';
+                                      case 'completed':
+                                        return 'bg-green-100 text-green-800';
+                                      case 'missed':
+                                        return 'bg-red-100 text-red-800';
+                                      case 'cancelled':
+                                        return 'bg-gray-100 text-gray-800';
+                                      default:
+                                        return 'bg-gray-100 text-gray-800';
+                                    }
+                                  })()
+                                }`}>
+                                  {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1).replace('_', ' ')}
+                                </span>
+                              </div>
+                              <div className="flex items-center text-sm text-[#ffffff]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Cancel
-                              </button>
-                            )}
-                            {appointment.status === 'in_progress' && (
-                              <button
-                                onClick={() => handleCompleteAppointment(appointment.id)}
-                                className="px-2 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors duration-300 flex items-center text-xs"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                {appointment.startTime}
+                              </div>
+                              <div className="flex items-center text-sm text-[#ffffff]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                Complete
-                              </button>
-                            )}
+                                {appointment.trailer?.location || 'Location Unavailable'}
+                              </div>
+                              <div className="flex justify-between items-center mt-2">
+                                <button
+                                  onClick={() => openGoogleMaps(appointment.trailer?.location || '')}
+                                  className="px-2 py-1 bg-[#ffa300] text-[#3e2802] rounded-lg hover:bg-[#ffb733] transition-colors duration-300 flex items-center text-xs"
+                                  disabled={!appointment.trailer?.location}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                  </svg>
+                                  Take me there
+                                </button>
+                                {appointment.status === 'in_progress' && (
+                                  <button
+                                    onClick={() => handleCompleteAppointment(appointment.id)}
+                                    className="px-2 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors duration-300 flex items-center text-xs"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Complete
+                                  </button>
+                                )}
+                                {appointment.status === 'scheduled' && (
+                                  <button
+                                    onClick={() => handleCancelAppointment(appointment.id)}
+                                    className="px-2 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors duration-300 flex items-center text-xs"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Cancel
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 sm:py-12">
-              <div className="bg-[#3e2802] rounded-full p-3 sm:p-4 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-[#ffa300]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <p className="text-sm sm:text-base text-[#ffffff] mb-3 sm:mb-4">You don't have any {activeTab} appointments</p>
-              {activeTab === 'upcoming' && (
-                <button
-                  onClick={() => setShowBookingForm(true)}
-                  className="bg-[#3e2802] text-[#ffa300] px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-[#2a1c01] transition-colors duration-300 flex items-center mx-auto text-sm sm:text-base"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Book an Appointment
-                </button>
+              ) : (
+                <div className="text-center py-8 sm:py-12">
+                  <div className="bg-[#3e2802] rounded-full p-3 sm:p-4 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8 text-[#ffa300]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm sm:text-base text-[#ffffff] mb-3 sm:mb-4">You don't have any {activeTab} appointments</p>
+                  {activeTab === 'upcoming' && (
+                    <button
+                      onClick={() => setShowBookingForm(true)}
+                      className="bg-[#3e2802] text-[#ffa300] px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-[#2a1c01] transition-colors duration-300 flex items-center mx-auto text-sm sm:text-base"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Book an Appointment
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -1582,16 +1559,33 @@ export default function UserDashboardPage() {
 }
 
 function addMinutesToTime(time: string, minutes: number): string {
-  // Parse the time string (assuming format "h:mm a" or "h:mm p")
+  // Parse the time string (format "h:mm AM/PM")
   const [timeStr, period] = time.split(' ');
   const [hours, mins] = timeStr.split(':').map(Number);
   
-  // Create a date object with the time
-  const date = new Date();
-  date.setHours(hours + (period.toLowerCase() === 'pm' && hours !== 12 ? 12 : 0), mins + minutes);
+  // Convert to 24-hour format
+  let totalHours = hours;
+  if (period === 'PM' && hours !== 12) {
+    totalHours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    totalHours = 0;
+  }
   
-  // Format the time in 12-hour format
-  return format(date, 'h:mm a');
+  // Calculate total minutes and handle overflow
+  const totalMinutes = mins + minutes;
+  const newHours = totalHours + Math.floor(totalMinutes / 60);
+  const newMinutes = totalMinutes % 60;
+  
+  // Format the time in 24-hour format (HH:mm)
+  return `${newHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')}`;
+}
+
+// Helper function to format time for display
+function formatTimeForDisplay(time24: string): string {
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 }
 
 function calculateDistance(point1: string, point2: string): number {

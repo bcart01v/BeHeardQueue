@@ -179,5 +179,13 @@ function addMinutesToTime(time: string, minutes: number): string {
   const [hours, mins] = time.split(':').map(Number);
   const date = new Date();
   date.setHours(hours, mins + minutes);
-  return format(date, 'HH:mm');
+  return formatTimeForDisplay(format(date, 'HH:mm'));
+}
+
+// Add a helper function to format time for display
+function formatTimeForDisplay(time24: string): string {
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 } 

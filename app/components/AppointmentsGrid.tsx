@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format, parseISO } from 'date-fns';
-import TVDisplayHeader from '@/app/components/TVDisplayHeader';
-import AppointmentsGrid from '@/app/components/AppointmentsGrid';
+import { format } from 'date-fns';
 
 interface Company {
   id: string;
@@ -54,19 +51,19 @@ interface Trailer {
   name: string;
 }
 
-// Format time for display
-const formatTimeForDisplay = (time: string) => {
-  const [hours, minutes] = time.split(':').map(Number);
+interface AppointmentsGridProps {
+  companyId: string;
+}
+
+// Add a helper function to format time for display
+function formatTimeForDisplay(time24: string): string {
+  const [hours, minutes] = time24.split(':').map(Number);
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-};
+}
 
-export default function TVDisplayPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const companyId = searchParams.get('companyId');
-  
+export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
   const [company, setCompany] = useState<Company | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stalls, setStalls] = useState<Stall[]>([]);
@@ -75,8 +72,6 @@ export default function TVDisplayPage() {
   const [currentTime, setCurrentTime] = useState<string>(formatTimeForDisplay(format(new Date(), 'HH:mm')));
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [currentTimeIndex, setCurrentTimeIndex] = useState<number>(-1);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
   
   const timeSlotsRef = useRef<HTMLDivElement>(null);
   
@@ -193,11 +188,6 @@ export default function TVDisplayPage() {
   // Fetch company data
   useEffect(() => {
     const fetchCompanyData = async () => {
-      if (!companyId) {
-        setIsLoading(false);
-        return;
-      }
-      
       try {
         const companyDoc = await getDoc(doc(db, 'companies', companyId));
         
@@ -227,8 +217,6 @@ export default function TVDisplayPage() {
   
   // Fetch stalls and trailers
   useEffect(() => {
-    if (!companyId) return;
-    
     // Query for stalls
     const stallsQuery = query(
       collection(db, 'stalls'),
@@ -272,8 +260,6 @@ export default function TVDisplayPage() {
   
   // Fetch appointments and set up real-time listener
   useEffect(() => {
-    if (!companyId) return;
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -297,7 +283,7 @@ export default function TVDisplayPage() {
         const usersSnapshot = await getDocs(usersQuery);
         const usersMap = new Map();
         
-        usersSnapshot.forEach(doc => {
+        usersSnapshot.forEach((doc) => {
           const userData = doc.data();
           usersMap.set(doc.id, userData.firstName && userData.lastName 
             ? `${userData.firstName} ${userData.lastName}` 
@@ -312,7 +298,7 @@ export default function TVDisplayPage() {
         const stallsSnapshot = await getDocs(stallsQuery);
         const stallsMap = new Map();
         
-        stallsSnapshot.forEach(doc => {
+        stallsSnapshot.forEach((doc) => {
           const stallData = doc.data();
           stallsMap.set(doc.id, stallData.name || `Stall ${doc.id.substring(0, 4)}`);
         });
@@ -416,87 +402,18 @@ export default function TVDisplayPage() {
     });
   };
   
-  useEffect(() => {
-    // Fetch all companies
-    const companiesQuery = query(collection(db, 'companies'));
-    
-    const unsubscribe = onSnapshot(companiesQuery, (snapshot) => {
-      const companiesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Company[];
-      
-      setCompanies(companiesData);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleCompanySelect = (companyId: string) => {
-    router.push(`/tv-display?companyId=${companyId}`);
-  };
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100">
-        <TVDisplayHeader />
-        <div className="pt-20 px-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center text-gray-600">Loading companies...</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-2xl font-bold text-black">Loading...</div>
+      <div className="text-center text-gray-600 py-8">
+        Loading appointments...
       </div>
     );
   }
   
-  if (!companyId || !company) {
+  if (!company) {
     return (
-      <div className="min-h-screen bg-gray-100">
-        <TVDisplayHeader />
-        <div className="pt-20 px-4">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Select a Company</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {companies.map((company) => (
-                <button
-                  key={company.id}
-                  onClick={() => handleCompanySelect(company.id)}
-                  className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 text-left"
-                >
-                  <h3 className="text-xl font-semibold text-gray-800 mb-2">{company.name}</h3>
-                  <p className="text-gray-600 mb-4">{company.description}</p>
-                  <div className="text-sm text-gray-500">
-                    <p>Hours: {company.openTime} - {company.closeTime}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {companies.length === 0 && (
-              <div className="text-center text-gray-600 mt-8">
-                No companies available
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  // If a company is selected, show the appointments grid
-  if (companyId) {
-    return (
-      <div className="min-h-screen bg-gray-100">
-        <TVDisplayHeader />
-        <AppointmentsGrid companyId={companyId} />
+      <div className="text-center text-gray-600 py-8">
+        Company not found
       </div>
     );
   }
@@ -505,7 +422,7 @@ export default function TVDisplayPage() {
     <div className="min-h-screen bg-white">
       {/* Current Time Display */}
       <div className="fixed top-2 right-4 bg-black text-white px-4 py-2 rounded-lg text-xl font-bold z-50">
-        {formatTimeForDisplay(currentTime)}
+        {formatTimeForDisplay(format(new Date(), 'HH:mm'))}
       </div>
       
       {/* Stall Grid */}
@@ -594,4 +511,4 @@ export default function TVDisplayPage() {
       </div>
     </div>
   );
-}
+} 
