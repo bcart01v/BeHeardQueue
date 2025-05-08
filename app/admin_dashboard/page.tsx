@@ -31,6 +31,18 @@ import { useSearchParams } from 'next/navigation';
 import { useAdminGuard } from '../hooks/useAdminGuard';
 import SendMessageForm from '@/app/components/SendMessageForm';
 
+// Add these interfaces near the top with other interfaces
+interface DragItem {
+  type: 'appointment';
+  appointment: Appointment;
+}
+
+interface DropResult {
+  time: string;
+  stallId: string;
+  trailerId: string;
+}
+
 interface Company {
   id: string;
   name: string;
@@ -68,6 +80,7 @@ interface Appointment {
   duration?: number;
   status: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled';
   stallId: string;
+  trailerId: string;
   stallName?: string;
   userName?: string;
   createdAt: Date;
@@ -96,6 +109,7 @@ interface StallGridProps {
   updateAppointmentStatus: (appointmentId: string, newStatus: 'scheduled' | 'checked-in' | 'in-progress' | 'completed' | 'cancelled') => Promise<void>;
   onTimeSlotSelect: (time: string, stallId: string, trailerId: string) => void;
   onStallStatusChange: (stallId: string, newStatus: string) => void;
+  onAppointmentDrop: (appointment: Appointment, dropResult: DropResult) => Promise<void>;
 }
 
 interface NewUserForm {
@@ -162,7 +176,8 @@ const StallGrid: React.FC<StallGridProps> = ({
   selectedTimeSlot,
   updateAppointmentStatus, 
   onTimeSlotSelect,
-  onStallStatusChange
+  onStallStatusChange,
+  onAppointmentDrop
 }) => {
   const [selectedGridAppointment, setSelectedGridAppointment] = useState<Appointment & { fcmToken?: string } | null>(null);
   const [showStatusMenuStallId, setShowStatusMenuStallId] = useState<string | null>(null);
@@ -269,6 +284,19 @@ const StallGrid: React.FC<StallGridProps> = ({
       // If there's no appointment, trigger the time slot selection callback
       onTimeSlotSelect(time, stallId, trailerId);
     }
+  };
+
+  const handleDrop = (e: React.DragEvent, time: string, stallId: string, trailerId: string) => {
+    e.preventDefault();
+    const dragData = JSON.parse(e.dataTransfer.getData('application/json')) as DragItem;
+    if (dragData.type === 'appointment') {
+      onAppointmentDrop(dragData.appointment, { time, stallId, trailerId });
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
   };
 
   return (
@@ -378,6 +406,8 @@ const StallGrid: React.FC<StallGridProps> = ({
                               : 'bg-[#1e1b1b]'
                           } relative group cursor-pointer`}
                           onClick={() => handleTimeSlotClick(time, stall.id, trailer.id, appointment)}
+                          onDrop={(e) => handleDrop(e, time, stall.id, trailer.id)}
+                          onDragOver={handleDragOver}
                         >
                           {appointment && (
                             <div className="absolute inset-0 flex items-center justify-center text-sm sm:text-base md:text-lg font-medium text-white px-0.5 truncate">
@@ -1173,7 +1203,7 @@ function AppointmentBookingModal({
         userId: user.id,
         companyId,
         stallId: selectedTimeSlot.stallId,
-        trailerId: selectedTimeSlot.trailerId,
+        trailerId: selectedTimeSlot.trailerId || '',
         serviceType: selectedService,
         date: Timestamp.fromDate(appointmentDate),
         startTime: timeString,
@@ -1903,6 +1933,7 @@ function AdminDashboardContent() {
           endTime: appointmentData.endTime,
           status: appointmentData.status,
           stallId: appointmentData.stallId,
+          trailerId: appointmentData.trailerId || '',
           stallName: stallName,
           userName: userName,
           createdAt: appointmentData.createdAt.toDate(),
@@ -2038,6 +2069,7 @@ function AdminDashboardContent() {
           endTime: data.endTime,
           status: data.status,
           stallId: data.stallId,
+          trailerId: data.trailerId || '',
           stallName: stallName,
           userName: userName,
           createdAt: data.createdAt.toDate(),
@@ -2334,6 +2366,181 @@ function AdminDashboardContent() {
     return () => clearInterval(interval);
   }, []);
 
+  // Add this new component before the AdminDashboardContent component
+  interface StallAssignmentModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    appointment: Appointment;
+    stalls: any[];
+    onAssign: (appointmentId: string, stallId: string) => Promise<void>;
+  }
+
+  const StallAssignmentModal: React.FC<StallAssignmentModalProps> = ({
+    isOpen,
+    onClose,
+    appointment,
+    stalls,
+    onAssign
+  }) => {
+    const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    // Filter stalls based on service type
+    const availableStalls = stalls.filter(stall => 
+      stall.serviceType === appointment.serviceType && 
+      stall.status === 'available' &&
+      stall.trailerGroup === appointment.trailerId
+    );
+
+    const handleAssign = async () => {
+      if (!selectedStallId) return;
+      
+      setLoading(true);
+      try {
+        await onAssign(appointment.id, selectedStallId);
+        onClose();
+      } catch (error) {
+        console.error('Error assigning stall:', error);
+        toast.error('Failed to assign stall');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-[#ffa300]">Assign Stall</h2>
+            <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+              <XCircleIcon className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-[#3e2802] p-4 rounded-lg">
+              <h3 className="text-[#ffa300] font-medium mb-2">Appointment Details</h3>
+              <p className="text-white">Customer: {appointment.userName}</p>
+              <p className="text-white">Service: {appointment.serviceType}</p>
+              <p className="text-white">Time: {formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+            </div>
+
+            <div>
+              <h3 className="text-[#ffa300] font-medium mb-2">Available Stalls</h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {availableStalls.length > 0 ? (
+                  availableStalls.map(stall => (
+                    <button
+                      key={stall.id}
+                      onClick={() => setSelectedStallId(stall.id)}
+                      className={`w-full p-3 rounded-lg text-left transition-colors ${
+                        selectedStallId === stall.id
+                          ? 'bg-[#ffa300] text-[#1e1b1b]'
+                          : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                      }`}
+                    >
+                      {stall.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-[#ffa300] text-center py-4">No available stalls for this service type</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 border border-[#ffa300] text-[#ffa300] rounded-md hover:bg-[#ffa300] hover:text-[#1e1b1b]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAssign}
+                disabled={!selectedStallId || loading}
+                className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded-md hover:bg-[#ffb733] disabled:opacity-50"
+              >
+                {loading ? 'Assigning...' : 'Assign Stall'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add this function inside the AdminDashboardContent component
+  const handleAssignStall = async (appointmentId: string, stallId: string) => {
+    try {
+      const appointmentRef = doc(db, 'appointments', appointmentId);
+      await updateDoc(appointmentRef, {
+        stallId,
+        updatedAt: Timestamp.now()
+      });
+      
+      // Update local state
+      setTodayAppointments(prevAppointments =>
+        prevAppointments.map(appointment =>
+          appointment.id === appointmentId
+            ? { ...appointment, stallId }
+            : appointment
+        )
+      );
+      
+      toast.success('Stall assigned successfully');
+    } catch (error) {
+      console.error('Error assigning stall:', error);
+      throw error;
+    }
+  };
+
+  // Add this state inside the AdminDashboardContent component
+  const [showStallAssignmentModal, setShowStallAssignmentModal] = useState(false);
+  const [selectedAppointmentForAssignment, setSelectedAppointmentForAssignment] = useState<Appointment | null>(null);
+
+  const handleAppointmentDrop = async (appointment: Appointment, dropResult: DropResult) => {
+    try {
+      const { time, stallId, trailerId } = dropResult;
+      
+      // Calculate end time based on the stall's duration
+      const stall = stalls.find(s => s.id === stallId);
+      const duration = stall?.duration || 30;
+      
+      const [hours, minutes] = time.split(':').map(Number);
+      const startDate = new Date(selectedDate);
+      startDate.setHours(hours, minutes, 0, 0);
+      
+      const endDate = new Date(startDate);
+      endDate.setMinutes(endDate.getMinutes() + duration);
+      
+      const endTimeString = endDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+
+      // Update the appointment
+      const appointmentRef = doc(db, 'appointments', appointment.id);
+      await updateDoc(appointmentRef, {
+        startTime: time,
+        endTime: endTimeString,
+        stallId,
+        trailerId,
+        updatedAt: Timestamp.now()
+      });
+
+      // Refresh appointments
+      await fetchAppointmentsForDate(selectedDate);
+      
+      toast.success('Appointment updated successfully');
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      toast.error('Failed to update appointment');
+    }
+  };
+
   // Return the JSX for the component
   return (
     <div className="min-h-screen bg-[#1e1b1b] pt-24">
@@ -2422,143 +2629,292 @@ function AdminDashboardContent() {
             </button>
 
             <h2 className="text-xl font-bold mb-4 text-[#ffa300]">Appointments for {format(selectedDate, 'MMMM d, yyyy')}</h2>
-            <div className="space-y-2 max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-200px)] overflow-y-auto">
-              {todayAppointments.map((appointment) => (
-                <div key={appointment.id}>
-                  <div 
-                    className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
-                      selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
-                    }`}
-                    onClick={() => {
-                      if (selectedAppointment?.id === appointment.id) {
-                        setSelectedAppointment(null);
-                      } else {
-                        viewAppointmentDetails(appointment);
-                      }
-                    }}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
-                        <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
-                        <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
-                        appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
-                        appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
-                        appointment.status === 'completed' ? 'bg-green-500 text-white' :
-                        'bg-red-500 text-white'
-                      }`}>
-                        {appointment.status}
-                      </span>
-                    </div>
-
-                    {/* Appointment Details Section - Inline */}
-                    <div 
-                      className={`mt-2 mb-2 overflow-hidden transition-all duration-300 ease-in-out ${
-                        selectedAppointment && selectedAppointment.id === appointment.id
-                          ? 'max-h-[500px] opacity-100'
-                          : 'max-h-0 opacity-0'
-                      }`}
-                    >
-                      <div className="bg-[#2a1f02] p-4 rounded-lg">
-                        <div className="space-y-4">
-                          <div>
-                            <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
-                            <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
+            <div className="space-y-4 max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* Assigned Appointments */}
+              <div>
+                <h3 className="text-lg font-semibold text-[#ffa300] mb-2">Assigned Appointments</h3>
+                <div className="space-y-2">
+                  {todayAppointments
+                    .filter(appointment => appointment.stallId && appointment.stallId !== 'Unassigned')
+                    .map((appointment) => (
+                      <div key={appointment.id}>
+                        <div 
+                          className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
+                            selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
+                          }`}
+                          onClick={() => {
+                            if (selectedAppointment?.id === appointment.id) {
+                              setSelectedAppointment(null);
+                            } else {
+                              viewAppointmentDetails(appointment);
+                            }
+                          }}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
+                              <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
+                              <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                              appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                              appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                              appointment.status === 'completed' ? 'bg-green-500 text-white' :
+                              'bg-red-500 text-white'
+                            }`}>
+                              {appointment.status}
+                            </span>
                           </div>
-                          
-                          <div>
-                            <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <p className="text-sm text-gray-400">Service Type</p>
-                                <p className="text-white capitalize">{appointment.serviceType}</p>
+
+                          {/* Appointment Details Section - Inline */}
+                          <div 
+                            className={`mt-2 mb-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                              selectedAppointment && selectedAppointment.id === appointment.id
+                                ? 'max-h-[500px] opacity-100'
+                                : 'max-h-0 opacity-0'
+                            }`}
+                          >
+                            <div className="bg-[#2a1f02] p-4 rounded-lg">
+                              <div className="space-y-4">
+                                <div>
+                                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
+                                  <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
+                                </div>
+                                
+                                <div>
+                                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <p className="text-sm text-gray-400">Service Type</p>
+                                      <p className="text-white capitalize">{appointment.serviceType}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Time</p>
+                                      <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Status</p>
+                                      <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                        appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                                        appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                                        appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                                        appointment.status === 'completed' ? 'bg-green-500 text-white' :
+                                        'bg-red-500 text-white'
+                                      }`}>
+                                        {appointment.status}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Stall</p>
+                                      <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Trailer</p>
+                                      <p className="text-white">
+                                        {trailers.find(t => t.id === appointment.trailerId)?.name || 'Unknown Trailer'}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Created</p>
+                                      <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-sm text-gray-400">Time</p>
-                                <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-400">Status</p>
-                                <span className={`inline-block px-2 py-1 rounded-full text-xs ${
-                                  appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
-                                  appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
-                                  appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
-                                  appointment.status === 'completed' ? 'bg-green-500 text-white' :
-                                  'bg-red-500 text-white'
-                                }`}>
-                                  {appointment.status}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-400">Stall</p>
-                                <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-400">Created</p>
-                                <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                              
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                {appointment.status === 'scheduled' && (
+                                  <button 
+                                    onClick={() => updateAppointmentStatus(appointment.id, 'checked-in')}
+                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+                                  >
+                                    Check-in
+                                  </button>
+                                )}
+                                {appointment.status === 'checked-in' && (
+                                  <button 
+                                    onClick={() => {
+                                      updateAppointmentStatus(appointment.id, 'in-progress');
+                                      handleStallStatusChange(appointment.stallId, 'in_use');
+                                    }}
+                                    className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                                  >
+                                    Start Service
+                                  </button>
+                                )}
+                                {appointment.status === 'in-progress' && (
+                                  <button 
+                                    onClick={() => {
+                                      updateAppointmentStatus(appointment.id, 'completed');
+                                      const newStatus = appointment.serviceType === 'shower' ? 'needs_cleaning' : 'available';
+                                      handleStallStatusChange(appointment.stallId, newStatus);
+                                    }}
+                                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                                  >
+                                    Complete Service
+                                  </button>
+                                )}
+                                {(appointment.status === 'scheduled' || appointment.status === 'checked-in') && (
+                                  <button 
+                                    onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                  >
+                                    Cancel Service
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAppointment(null);
+                                  }}
+                                  className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                                >
+                                  Close
+                                </button>
                               </div>
                             </div>
                           </div>
                         </div>
-                        
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {appointment.status === 'scheduled' && (
-                            <button 
-                              onClick={() => updateAppointmentStatus(appointment.id, 'checked-in')}
-                              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
-                            >
-                              Check-in
-                            </button>
-                          )}
-                          {appointment.status === 'checked-in' && (
-                            <button 
-                              onClick={() => {
-                                updateAppointmentStatus(appointment.id, 'in-progress');
-                                handleStallStatusChange(appointment.stallId, 'in_use');
-                              }}
-                              className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                            >
-                              Start Service
-                            </button>
-                          )}
-                          {appointment.status === 'in-progress' && (
-                            <button 
-                              onClick={() => {
-                                updateAppointmentStatus(appointment.id, 'completed');
-                                const newStatus = appointment.serviceType === 'shower' ? 'needs_cleaning' : 'available';
-                                handleStallStatusChange(appointment.stallId, newStatus);
-                              }}
-                              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                            >
-                              Complete Service
-                            </button>
-                          )}
-                          {(appointment.status === 'scheduled' || appointment.status === 'checked-in') && (
-                            <button 
-                              onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
-                              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-                            >
-                              Cancel Service
-                            </button>
-                          )}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Unassigned Appointments */}
+              <div>
+                <h3 className="text-lg font-semibold text-[#ffa300] mb-2">Unassigned Appointments</h3>
+                <div className="space-y-2">
+                  {todayAppointments
+                    .filter(appointment => !appointment.stallId || appointment.stallId === 'Unassigned')
+                    .map((appointment) => (
+                      <div key={appointment.id}>
+                        <div 
+                          className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
+                            selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
+                          }`}
+                          onClick={() => {
+                            if (selectedAppointment?.id === appointment.id) {
                               setSelectedAppointment(null);
-                            }}
-                            className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                            } else {
+                              viewAppointmentDetails(appointment);
+                            }
+                          }}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('application/json', JSON.stringify({
+                              type: 'appointment',
+                              appointment
+                            }));
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
+                              <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
+                              <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                              appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                              appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                              appointment.status === 'completed' ? 'bg-green-500 text-white' :
+                              'bg-red-500 text-white'
+                            }`}>
+                              {appointment.status}
+                            </span>
+                          </div>
+
+                          {/* Appointment Details Section - Inline */}
+                          <div 
+                            className={`mt-2 mb-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                              selectedAppointment && selectedAppointment.id === appointment.id
+                                ? 'max-h-[500px] opacity-100'
+                                : 'max-h-0 opacity-0'
+                            }`}
                           >
-                            Close
-                          </button>
+                            <div className="bg-[#2a1f02] p-4 rounded-lg">
+                              <div className="space-y-4">
+                                <div>
+                                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
+                                  <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
+                                </div>
+                                
+                                <div>
+                                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <p className="text-sm text-gray-400">Service Type</p>
+                                      <p className="text-white capitalize">{appointment.serviceType}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Time</p>
+                                      <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Status</p>
+                                      <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                        appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
+                                        appointment.status === 'checked-in' ? 'bg-purple-500 text-white' :
+                                        appointment.status === 'in-progress' ? 'bg-yellow-500 text-white' :
+                                        appointment.status === 'completed' ? 'bg-green-500 text-white' :
+                                        'bg-red-500 text-white'
+                                      }`}>
+                                        {appointment.status}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Stall</p>
+                                      <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Trailer</p>
+                                      <p className="text-white">
+                                        {trailers.find(t => t.id === appointment.trailerId)?.name || 'Unknown Trailer'}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-400">Created</p>
+                                      <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <button 
+                                  onClick={() => {
+                                    setSelectedAppointmentForAssignment(appointment);
+                                    setShowStallAssignmentModal(true);
+                                  }}
+                                  className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded hover:bg-[#ffb733]"
+                                >
+                                  Assign Stall
+                                </button>
+                                <button 
+                                  onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  Cancel Service
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAppointment(null);
+                                  }}
+                                  className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                                >
+                                  Close
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    ))}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
           
@@ -2642,6 +2998,7 @@ function AdminDashboardContent() {
               updateAppointmentStatus={updateAppointmentStatus}
               onTimeSlotSelect={handleTimeSlotSelect}
               onStallStatusChange={handleStallStatusChange}
+              onAppointmentDrop={handleAppointmentDrop}
             />
           </div>
         </div>
@@ -2701,6 +3058,12 @@ function AdminDashboardContent() {
                     <div>
                       <p className="text-sm text-gray-400">Stall</p>
                       <p className="text-white">{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Trailer</p>
+                      <p className="text-white">
+                        {trailers.find(t => t.id === selectedAppointment.trailerId)?.name || 'Unknown Trailer'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Created</p>
@@ -2767,6 +3130,19 @@ function AdminDashboardContent() {
           </div>
         )}
       </div>
+
+      {showStallAssignmentModal && selectedAppointmentForAssignment && (
+        <StallAssignmentModal
+          isOpen={showStallAssignmentModal}
+          onClose={() => {
+            setShowStallAssignmentModal(false);
+            setSelectedAppointmentForAssignment(null);
+          }}
+          appointment={selectedAppointmentForAssignment}
+          stalls={stalls}
+          onAssign={handleAssignStall}
+        />
+      )}
     </div>
   );
 }

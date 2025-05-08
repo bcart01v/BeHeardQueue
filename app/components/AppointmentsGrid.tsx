@@ -69,11 +69,32 @@ export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
   const [stalls, setStalls] = useState<Stall[]>([]);
   const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState<string>(formatTimeForDisplay(format(new Date(), 'HH:mm')));
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
-  const [currentTimeIndex, setCurrentTimeIndex] = useState<number>(-1);
+  const [currentTime, setCurrentTime] = useState<string>('');
   
   const timeSlotsRef = useRef<HTMLDivElement>(null);
+  
+  // Add useEffect for the clock
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true 
+      }));
+    };
+
+    // Update immediately
+    updateClock();
+    
+    // Update every second
+    const interval = setInterval(updateClock, 1000);
+    
+    // Cleanup
+    return () => clearInterval(interval);
+  }, []);
   
   // Generate time slots between company open and close time
   const generateTimeSlots = (startTime: string, endTime: string) => {
@@ -163,7 +184,7 @@ export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
       case 'cancelled':
         return 'bg-red-500 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-500 text-white';
     }
   };
   
@@ -198,12 +219,6 @@ export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
           // Generate time slots based on company hours
           const slots = generateTimeSlots(companyData.openTime, companyData.closeTime);
           setTimeSlots(slots);
-          
-          // Set current time and find closest time slot
-          const currentTimeStr = getCurrentTimeString();
-          setCurrentTime(formatTimeForDisplay(currentTimeStr));
-          const closestIndex = findClosestTimeSlot(slots, currentTimeStr);
-          setCurrentTimeIndex(closestIndex);
         } else {
           console.error('Company not found');
         }
@@ -356,31 +371,6 @@ export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
     };
   }, [companyId]);
   
-  // Update current time every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newCurrentTime = getCurrentTimeString();
-      setCurrentTime(formatTimeForDisplay(newCurrentTime));
-      
-      if (timeSlots.length > 0) {
-        const newClosestIndex = findClosestTimeSlot(timeSlots, newCurrentTime);
-        setCurrentTimeIndex(newClosestIndex);
-        
-        // Scroll to current time after a short delay to ensure the grid is rendered
-        setTimeout(() => {
-          if (timeSlotsRef.current) {
-            const timeRow = timeSlotsRef.current.querySelector(`[data-time-index="${newClosestIndex}"]`);
-            if (timeRow) {
-              timeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          }
-        }, 500);
-      }
-    }, 60000);
-    
-    return () => clearInterval(interval);
-  }, [timeSlots]);
-  
   // Filter stalls based on service type
   const filteredStalls = stalls.filter(stall => stall.serviceType === 'shower');
   
@@ -419,95 +409,80 @@ export default function AppointmentsGrid({ companyId }: AppointmentsGridProps) {
   }
   
   return (
-    <div className="min-h-screen bg-white">
-      {/* Current Time Display */}
-      <div className="fixed top-2 right-4 bg-black text-white px-4 py-2 rounded-lg text-xl font-bold z-50">
-        {formatTimeForDisplay(format(new Date(), 'HH:mm'))}
+    <div className="flex flex-col border border-gray-200 rounded-xl bg-white overflow-hidden">
+      {/* Header with Clock */}
+      <div className="flex justify-between items-center bg-gray-50 p-4 border-b border-gray-200">
+        <h2 className="text-xl font-bold text-gray-700">Appointment Schedule</h2>
+        <div className="text-2xl font-bold text-gray-700">{currentTime}</div>
       </div>
-      
-      {/* Stall Grid */}
-      <div className="flex flex-col h-screen border border-gray-300 overflow-hidden pt-16" ref={timeSlotsRef}>
-        {/* Header - Trailers and Stalls */}
-        <div className="flex border-b border-gray-300">
-          <div className="w-24 flex-shrink-0 bg-gray-100 text-black font-bold p-2 text-center border-r border-gray-300">Time</div>
-          {filteredTrailers.map(trailer => (
-            <div key={trailer.id} className="flex-1">
-              <div className="text-center font-bold p-2 bg-gray-100 text-black border-b border-gray-300">{trailer.name}</div>
-              <div className="flex">
-                {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
+
+      {/* Header - Trailers and Stalls */}
+      <div className="flex border-b border-gray-200 pr-[17px]">
+        <div className="w-24 flex-shrink-0 bg-gray-50 text-gray-700 font-bold p-2 text-center border-r border-gray-200 text-lg">Time</div>
+        {trailers.map(trailer => (
+          <div key={trailer.id} className="flex-1">
+            <div className="text-center font-bold p-2 bg-gray-50 text-gray-700 border-b border-gray-200 text-lg">{trailer.name}</div>
+            <div className="flex">
+              {stalls.filter(stall => stall.trailerGroup === trailer.id)
+                .map(stall => {
+                  const stallStatus = getStallStatus(stall.id);
+                  
+                  return (
+                    <div key={stall.id} className="flex-1">
+                      <div 
+                        className={`h-12 border-r border-gray-200 ${
+                          stall.serviceType === 'shower' ? getStatusColor(stallStatus.status) : 'bg-white'
+                        } relative group`}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center text-base font-semibold text-white px-1 truncate">
+                          {stall.name}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Time slots and stall status */}
+      <div className="flex flex-col relative h-screen overflow-y-auto" ref={timeSlotsRef}>
+        {timeSlots.map((time) => (
+          <div 
+            key={time} 
+            className="flex border-b border-gray-200 relative"
+          >
+            <div className="w-24 flex-shrink-0 p-2 text-base font-semibold text-gray-700 bg-gray-50 border-r border-gray-200 sticky left-0 z-10">
+              {formatTimeForDisplay(time)}
+            </div>
+            {trailers.map(trailer => (
+              <div key={`${trailer.id}-${time}`} className="flex-1 flex">
+                {stalls.filter(stall => stall.trailerGroup === trailer.id)
                   .map(stall => {
-                    const currentStatus = getStallStatus(stall.id);
-                    const statusColor = getStatusColor(currentStatus.status);
+                    const appointment = getAppointmentForCell(stall.id, time);
                     
                     return (
                       <div 
-                        key={stall.id} 
-                        className={`flex-1 text-center p-2 border-r border-gray-300 ${statusColor}`}
+                        key={`${stall.id}-${time}`} 
+                        className={`flex-1 h-12 border-r border-gray-200 ${
+                          appointment 
+                            ? getStatusColor(appointment.status)
+                            : 'bg-white'
+                        } relative group`}
                       >
-                        <div className="text-2xl font-medium">{stall.name}</div>
-                        {currentStatus.userName && (
-                          <div className="text-xs mt-1 opacity-75">
-                            {currentStatus.userName}
+                        {appointment && (
+                          <div className="absolute inset-0 flex items-center justify-center text-base font-semibold text-white px-2 truncate">
+                            {appointment.userName}
                           </div>
                         )}
                       </div>
                     );
                   })}
               </div>
-            </div>
-          ))}
-        </div>
-        
-        {/* Time slots and stall status */}
-        <div className="flex flex-col relative flex-grow overflow-y-auto">
-          {timeSlots.map((time, index) => (
-            <div 
-              key={time} 
-              className="flex border-b border-gray-300 relative"
-              data-time-index={index}
-            >
-              <div className="w-24 flex-shrink-0 p-2 text-sm font-medium text-black bg-gray-100 border-r border-gray-300 sticky left-0 z-10">
-                {formatTimeForDisplay(time)}
-              </div>
-              {filteredTrailers.map(trailer => (
-                <div key={`${trailer.id}-${time}`} className="flex-1 flex">
-                  {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
-                    .map(stall => {
-                      const appointment = getAppointmentForCell(stall.id, time);
-                      const statusColor = appointment ? getStatusColor(appointment.status) : 'bg-white';
-                      
-                      return (
-                        <div 
-                          key={`${stall.id}-${time}`} 
-                          className={`flex-1 h-12 border-r border-gray-300 ${statusColor} relative group`}
-                        >
-                          {appointment && (
-                            <div className="absolute inset-0 flex items-center justify-center text-4xl text-white font-medium px-1 truncate">
-                              {appointment.userName}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              ))}
-            </div>
-          ))}
-          
-          {/* Current time indicator line */}
-          {currentTimeIndex >= 0 && (
-            <div 
-              className="absolute left-0 right-0 h-0.5 bg-red-500 z-10 pointer-events-none"
-              style={{ 
-                top: `${currentTimeIndex * 48}px`, // 48px is the height of each time slot row
-                transform: 'translateY(-50%)'
-              }}
-            >
-              <div className="absolute -left-1 -top-1 w-2 h-2 bg-red-500 rounded-full"></div>
-              <div className="absolute -right-1 -top-1 w-2 h-2 bg-red-500 rounded-full"></div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
