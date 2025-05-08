@@ -19,10 +19,12 @@ import Notifications from '../components/Notifications';
 
 interface TimeSlot {
   time: string;
-  stallId: string;
-  trailerId: string;
   duration: number;
   bufferTime: number;
+}
+
+interface TrailerWithDistance extends Trailer {
+  distance: number;
 }
 
 interface TimeSlotAppointment {
@@ -236,252 +238,120 @@ function BookingForm({
   userLocation
 }: BookingFormProps) {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(null);
+  const [selectedTrailer, setSelectedTrailer] = useState<TrailerWithDistance | null>(null);
+  const [availableTrailers, setAvailableTrailers] = useState<TrailerWithDistance[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [availableStalls, setAvailableStalls] = useState<Stall[]>([]);
-  const [availableTrailers, setAvailableTrailers] = useState<Trailer[]>([]);
-  const [isValidating, setIsValidating] = useState(false);
+  const [trailerTimeSlots, setTrailerTimeSlots] = useState<TimeSlot[]>([]);
 
   // Calculate min and max dates based on company settings
   const minDate = new Date();
   const maxDate = userCompany?.maxBookingDays 
     ? addDays(new Date(), userCompany.maxBookingDays) 
-    : addDays(new Date(), 30); // Default to 30 days if not set
+    : addDays(new Date(), 30);
 
-  // Filter available stalls and trailers when service type changes
+  // Fetch available trailers when service type changes
   useEffect(() => {
-    if (!selectedServiceType) {
-      setAvailableStalls([]);
-      setAvailableTrailers([]);
+    const fetchAvailableTrailers = async () => {
+      if (!selectedServiceType || !userCompany) return;
+      try {
+        const trailersQuery = query(
+          collection(db, 'trailers'),
+          where('companyId', '==', userCompany.id)
+        );
+        const trailersSnapshot = await getDocs(trailersQuery);
+        const trailers = trailersSnapshot.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        } as Trailer));
+        // Calculate distances and sort trailers
+        const trailersWithDistance = trailers.map(trailer => {
+          let distance = Infinity;
+          if (userLocation) {
+            if (typeof trailer.lat === 'number' && typeof trailer.lng === 'number') {
+              distance = calculateDistance(
+                `${userLocation.lat},${userLocation.lng}`,
+                `${trailer.lat},${trailer.lng}`
+              );
+            } else if (typeof trailer.location === 'string' && trailer.location.includes(',')) {
+              distance = calculateDistance(
+                `${userLocation.lat},${userLocation.lng}`,
+                trailer.location
+              );
+            }
+          }
+          // Convert distance to miles
+          const distanceInMiles = distance * 0.621371;
+          return { ...trailer, distance: distanceInMiles } as TrailerWithDistance;
+        });
+
+        // Sort trailers by distance in miles (handle Infinity properly)
+        trailersWithDistance.sort((a, b) => {
+          if (a.distance === Infinity) return 1;
+          if (b.distance === Infinity) return -1;
+          return a.distance - b.distance;
+        });
+        
+        setAvailableTrailers(trailersWithDistance);
+      } catch (error) {
+        console.error('Error fetching trailers:', error);
+        setError('Failed to load available trailers');
+      }
+    };
+    fetchAvailableTrailers();
+  }, [selectedServiceType, userCompany, userLocation]);
+
+  // Calculate available time slots for the selected trailer
+  useEffect(() => {
+    if (!selectedTrailer || !selectedDate) {
+      setTrailerTimeSlots([]);
       return;
     }
-
-    // Fetch available stalls for the selected service type
-    const fetchAvailableStalls = async () => {
-      try {
-        const stallsQuery = query(
-          collection(db, 'stalls'),
-          where('serviceType', '==', selectedServiceType)
-        );
-        const stallsDoc = await getDocs(stallsQuery);
-        const stalls = stallsDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as Stall));
-        setAvailableStalls(stalls);
-
-        if (stalls.length === 0) {
-          setAvailableTrailers([]);
-          return;
-        }
-
-        // Get unique trailer IDs from stalls
-        const trailerIds = [...new Set(stalls.map(stall => stall.trailerGroup))];
-        
-        // Only fetch trailers if we have stall IDs
-        if (trailerIds.length > 0) {
-          // Fetch trailers
-          const trailersQuery = query(
-            collection(db, 'trailers'),
-            where('id', 'in', trailerIds)
-          );
-          const trailersDoc = await getDocs(trailersQuery);
-          const trailers = trailersDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trailer));
-          setAvailableTrailers(trailers);
-        } else {
-          setAvailableTrailers([]);
-        }
-      } catch (error) {
-        console.error('Error fetching available stalls and trailers:', error);
-        setError('Failed to load available services. Please try again.');
+    const calculateSlots = () => {
+      const slots: TimeSlot[] = [];
+      const [startHour, startMinute] = selectedTrailer.startTime.split(':').map(Number);
+      const [endHour, endMinute] = selectedTrailer.endTime.split(':').map(Number);
+      const startTime = new Date(selectedDate);
+      startTime.setHours(startHour, startMinute, 0, 0);
+      const endTime = new Date(selectedDate);
+      endTime.setHours(endHour, endMinute, 0, 0);
+      const duration = 30;
+      const bufferTime = 15;
+      const totalSlotDuration = duration + bufferTime;
+      let currentTime = startTime;
+      while (currentTime < endTime) {
+        const timeSlot = format(currentTime, 'HH:mm');
+        slots.push({ time: timeSlot, duration, bufferTime });
+        currentTime = new Date(currentTime.getTime() + totalSlotDuration * 60000);
       }
+      setTrailerTimeSlots(slots);
     };
-
-    fetchAvailableStalls();
-  }, [selectedServiceType]);
-
-  // Helper function to check for existing bookings
-  const getExistingBookings = async (
-    stallId: string,
-    date: Date,
-    startTime: string,
-    duration: number,
-    bufferTime: number
-  ) => {
-    // Create Date objects for the appointment window
-    const [hours, minutes] = startTime.split(':').map(Number);
-    const appointmentStart = new Date(date);
-    appointmentStart.setHours(hours, minutes, 0, 0);
-
-    const appointmentEnd = new Date(appointmentStart);
-    appointmentEnd.setMinutes(appointmentEnd.getMinutes() + duration);
-
-    // Add buffer time to the window
-    const windowStart = new Date(appointmentStart);
-    windowStart.setMinutes(windowStart.getMinutes() - bufferTime);
-
-    const windowEnd = new Date(appointmentEnd);
-    windowEnd.setMinutes(windowEnd.getMinutes() + bufferTime);
-
-    // Create a date object set to noon to avoid timezone issues
-    const queryDate = new Date(date);
-    queryDate.setHours(12, 0, 0, 0);
-
-    // Query for overlapping appointments
-    const appointmentsQuery = query(
-      collection(db, 'appointments'),
-      where('stallId', '==', stallId),
-      where('date', '==', Timestamp.fromMillis(queryDate.getTime())),
-      where('status', '==', 'scheduled')
-    );
-
-    const appointmentsSnapshot = await getDocs(appointmentsQuery);
-    const overlappingAppointments = [];
-
-    for (const doc of appointmentsSnapshot.docs) {
-      const appointment = doc.data();
-      const [appHours, appMinutes] = appointment.startTime.split(':').map(Number);
-      const appStart = new Date(date);
-      appStart.setHours(appHours, appMinutes, 0, 0);
-
-      const appEnd = new Date(appStart);
-      appEnd.setMinutes(appEnd.getMinutes() + appointment.duration);
-
-      // Check if appointments overlap
-      if (
-        (appStart <= windowEnd && appEnd >= windowStart) ||
-        (appointmentStart <= appEnd && appointmentEnd >= appStart)
-      ) {
-        overlappingAppointments.push(appointment);
-      }
-    }
-
-    return overlappingAppointments;
-  };
-
-  // Validate time slot when it changes
-  useEffect(() => {
-    if (selectedTimeSlot) {
-      validateTimeSlot(selectedTimeSlot);
-    }
-  }, [selectedTimeSlot]);
-
-  const validateTimeSlot = async (timeSlot: TimeSlot) => {
-    if (!selectedDate || !userCompany) return false;
-
-
-    // Get stall data
-    const stallDoc = await getDoc(doc(db, 'stalls', timeSlot.stallId));
-    if (!stallDoc.exists()) {
-      console.error('Stall not found');
-      return false;
-    }
-
-    const stall = stallDoc.data() as Stall;
-
-    // Check if stall is available
-    if (stall.status !== 'available') {
-      return false;
-    }
-
-    // Check if stall belongs to the user's company
-    if (stall.companyId !== userCompany.id) {
-      return false;
-    }
-
-    // Check if the selected date is today or in the future
-    const today = new Date();
-    today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
-
-    const selectedDateNoon = new Date(selectedDate);
-    selectedDateNoon.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
-
-
-    if (selectedDateNoon < today && !isSameDay(today, selectedDateNoon)) {
-      return false;
-    }
-
-    // Get trailer data
-    const trailerDoc = await getDoc(doc(db, 'trailers', timeSlot.trailerId));
-    if (!trailerDoc.exists()) {
-      console.error('Trailer not found');
-      return false;
-    }
-
-    const trailer = trailerDoc.data() as Trailer;
-
-    // Check if stall belongs to the selected trailer
-    if (stall.trailerGroup !== timeSlot.trailerId) {
-      return false;
-    }
-
-    // Parse the time
-    const [time, period] = timeSlot.time.split(' ');
-    const [hours, minutes] = time.split(':').map(Number);
-    const parsedTime = {
-      hour: period === 'PM' && hours !== 12 ? hours + 12 : hours,
-      minute: minutes,
-      period,
-      original: timeSlot.time
-    };
-
-    // Create Date objects for comparison
-    const appointmentStartTime = new Date(selectedDate);
-    appointmentStartTime.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
-
-    const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
-    const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
-
-    const trailerStartTime = new Date(selectedDate);
-    trailerStartTime.setHours(startHour, startMinute, 0, 0);
-
-    const trailerEndTime = new Date(selectedDate);
-    trailerEndTime.setHours(endHour, endMinute, 0, 0);
-
-    // Check if the appointment time is within the trailer's operating hours
-    if (appointmentStartTime < trailerStartTime || appointmentStartTime > trailerEndTime) {
-      return false;
-    }
-
-    // Check for existing bookings
-    const existingBookings = await getExistingBookings(
-      timeSlot.stallId,
-      selectedDate,
-      timeSlot.time,
-      timeSlot.duration,
-      timeSlot.bufferTime
-    );
-
-    if (existingBookings.length > 0) {
-      return false;
-    }
-
-    return true;
-  };
+    calculateSlots();
+  }, [selectedTrailer, selectedDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!selectedDate || !selectedTimeSlot || !selectedServiceType) {
+    if (!selectedDate || !selectedTimeSlot || !selectedServiceType || !selectedTrailer) {
       setError('Please fill in all required fields');
       return;
     }
-
-    // Create appointment object
     const appointment: TimeSlotAppointment = {
       date: selectedDate,
       startTime: selectedTimeSlot.time,
       endTime: addMinutesToTime(selectedTimeSlot.time, selectedTimeSlot.duration),
-      stallId: selectedTimeSlot.stallId,
-      trailerId: selectedTimeSlot.trailerId,
+      stallId: 'Unassigned',
+      trailerId: selectedTrailer.id,
       duration: selectedTimeSlot.duration
     };
-
     onSubmit(appointment);
   };
 
   return (
     <div className="fixed inset-0 bg-[#1e1b1b] bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-[#ffa300] rounded-lg shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <form onSubmit={handleSubmit} className="bg-[#ffa300] rounded-lg shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-[#3e2802]">Book an Appointment</h2>
           <button 
+            type="button"
             onClick={onClose}
             className="text-[#3e2802] hover:text-[#2a1c01]"
           >
@@ -490,160 +360,195 @@ function BookingForm({
             </svg>
           </button>
         </div>
-
         {error && (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
             {error}
           </div>
         )}
-
-        <form onSubmit={handleSubmit}>
+        {/* Service Type Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-[#3e2802] mb-2">
+            Service Type *
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedServiceType('shower')}
+              className={`p-3 rounded-md transition-colors ${
+                selectedServiceType === 'shower'
+                  ? 'bg-[#3e2802] text-[#ffa300]'
+                  : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+              }`}
+            >
+              Shower
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedServiceType('laundry')}
+              className={`p-3 rounded-md transition-colors ${
+                selectedServiceType === 'laundry'
+                  ? 'bg-[#3e2802] text-[#ffa300]'
+                  : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+              }`}
+            >
+              Laundry
+            </button>
+            <button
+              type="button"
+              disabled
+              className={`p-3 rounded-md transition-colors ${
+                selectedServiceType === 'haircut'
+                  ? 'bg-[#3e2802] text-[#ffa300] opacity-50'
+                  : 'bg-[#ffffff] text-[#3e2802] opacity-50'
+              }`}
+            >
+              Haircut
+            </button>
+          </div>
+        </div>
+        {/* Trailer Selection */}
+        {selectedServiceType && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-[#3e2802] mb-2">
-              Service Type *
+              Select a Trailer *
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedServiceType('shower')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedServiceType === 'shower'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Shower
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedServiceType('laundry')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedServiceType === 'laundry'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Laundry
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedServiceType('haircut')}
-                className={`p-3 rounded-md transition-colors ${
-                  selectedServiceType === 'haircut'
-                    ? 'bg-[#3e2802] text-[#ffa300]'
-                    : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
-                }`}
-              >
-                Haircut
-              </button>
-            </div>
-            {!selectedServiceType && (
-              <p className="mt-2 text-sm text-red-600">Please select a service type</p>
-            )}
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-[#3e2802] mb-1">
-              Date *
-            </label>
-            <div className="flex space-x-2">
-              <input
-                type="date"
-                min={format(minDate, 'yyyy-MM-dd')}
-                max={format(maxDate, 'yyyy-MM-dd')}
-                value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    // Parse the date string directly to avoid timezone issues
-                    const [year, month, day] = e.target.value.split('-').map(Number);
-                    // Create a date object with the local timezone
-                    const date = new Date(year, month - 1, day);
-                    // Set the time to noon to avoid any timezone issues
-                    date.setHours(12, 0, 0, 0);
-                    setSelectedDate(date);
-                  } else {
-                    setSelectedDate(null);
+            <div className="space-y-2">
+              {availableTrailers.map((trailer) => {
+                // Updated distance logic: use lat/lng if available
+                let showDistance = false;
+                let distanceText = 'Location unavailable';
+                let trailerLat = null;
+                let trailerLng = null;
+                if (typeof trailer.lat === 'number' && typeof trailer.lng === 'number' && !isNaN(trailer.lat) && !isNaN(trailer.lng)) {
+                  trailerLat = trailer.lat;
+                  trailerLng = trailer.lng;
+                  showDistance = true;
+                } else if (typeof trailer.location === 'string' && trailer.location.includes(',')) {
+                  const [lat, lng] = trailer.location.split(',').map(Number);
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    trailerLat = lat;
+                    trailerLng = lng;
+                    showDistance = true;
                   }
-                }}
-                className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const today = new Date();
-                  // Set the time to noon to avoid any timezone issues
-                  today.setHours(12, 0, 0, 0);
-                  setSelectedDate(today);
-                }}
-                className="px-3 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] transition-colors"
-                title="Set to today"
-              >
-                Today
-              </button>
-            </div>
-            {userCompany?.maxBookingDays && (
-              <p className="mt-1 text-xs text-[#3e2802]">
-                You can book up to {userCompany.maxBookingDays} days in advance
-              </p>
-            )}
-          </div>
-
-          {selectedDate && selectedServiceType && availableTimeSlots.length > 0 && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-[#3e2802] mb-2">
-                Available Time Slots *
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {availableTimeSlots.map((slot) => (
+                }
+                let distance = null;
+                if (showDistance && userLocation) {
+                  distance = calculateDistance(
+                    `${userLocation.lat},${userLocation.lng}`,
+                    `${trailerLat},${trailerLng}`
+                  );
+                }
+                if (showDistance && typeof distance === 'number' && !isNaN(distance) && distance !== Infinity) {
+                  // Convert distance from kilometers to miles
+                  const distanceInMiles = distance * 0.621371;
+                  distanceText = distanceInMiles < 1
+                    ? `${Math.round(distanceInMiles * 5280)}ft away`
+                    : `${distanceInMiles.toFixed(1)}mi away`;
+                }
+                return (
                   <button
-                    key={`${slot.time}-${slot.stallId}`}
+                    key={trailer.id}
                     type="button"
-                    onClick={() => setSelectedTimeSlot(slot)}
-                    className={`p-2 text-sm rounded-md transition-colors ${
-                      selectedTimeSlot?.time === slot.time && selectedTimeSlot?.stallId === slot.stallId
+                    onClick={() => setSelectedTrailer(trailer)}
+                    className={`w-full p-3 rounded-md transition-colors ${
+                      selectedTrailer?.id === trailer.id
                         ? 'bg-[#3e2802] text-[#ffa300]'
                         : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
                     }`}
-                    disabled={isValidating}
                   >
-                    {formatTimeForDisplay(slot.time)}
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{trailer.name}</span>
+                      <span className="text-sm">{distanceText}</span>
+                    </div>
+                    <div className="text-sm mt-1">{trailer.location}</div>
                   </button>
-                ))}
-              </div>
-              {!selectedTimeSlot && (
-                <p className="mt-2 text-sm text-red-600">Please select a time slot</p>
-              )}
-              {isValidating && (
-                <p className="mt-2 text-sm text-[#3e2802]">Validating time slot...</p>
-              )}
+                );
+              })}
             </div>
-          )}
-
-          {selectedDate && selectedServiceType && availableTimeSlots.length === 0 && (
-            <div className="mb-4 p-3 bg-[#3e2802] text-[#ffa300] rounded-md">
-              No available time slots for the selected date and service type. Please try another date or service.
-            </div>
-          )}
-
-          <div className="flex justify-end space-x-3 mt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-[#3e2802] rounded-md text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading || !selectedDate || !selectedTimeSlot || !selectedServiceType || isValidating}
-              className="px-4 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Booking...' : 'Book Appointment'}
-            </button>
           </div>
-        </form>
-      </div>
+        )}
+        {/* Date and Time Slot Selection */}
+        {selectedTrailer && (
+          <>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#3e2802] mb-1">
+                Date *
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="date"
+                  min={format(minDate, 'yyyy-MM-dd')}
+                  max={format(maxDate, 'yyyy-MM-dd')}
+                  value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [year, month, day] = e.target.value.split('-').map(Number);
+                      const date = new Date(year, month - 1, day);
+                      date.setHours(12, 0, 0, 0);
+                      setSelectedDate(date);
+                    } else {
+                      setSelectedDate(null);
+                    }
+                  }}
+                  className="w-full p-2 border border-[#3e2802] rounded-md text-[#3e2802] bg-[#ffffff]"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = new Date();
+                    today.setHours(12, 0, 0, 0);
+                    setSelectedDate(today);
+                  }}
+                  className="px-3 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] transition-colors"
+                  title="Set to today"
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+            {selectedDate && trailerTimeSlots.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-[#3e2802] mb-2">
+                  Available Time Slots *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {trailerTimeSlots.map((slot) => (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      onClick={() => setSelectedTimeSlot(slot)}
+                      className={`p-2 text-sm rounded-md transition-colors ${
+                        selectedTimeSlot?.time === slot.time
+                          ? 'bg-[#3e2802] text-[#ffa300]'
+                          : 'bg-[#ffffff] text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]'
+                      }`}
+                    >
+                      {formatTimeForDisplay(slot.time)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        <div className="flex justify-end space-x-3 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-[#3e2802] rounded-md text-[#3e2802] hover:bg-[#3e2802] hover:text-[#ffa300]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || !selectedDate || !selectedTimeSlot || !selectedServiceType || !selectedTrailer}
+            className="px-4 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Booking...' : 'Book Appointment'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -678,6 +583,7 @@ export default function UserDashboardPage() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          console.log('Got location:', position.coords); // Debug log
           setUserLocation({
             lat: position.coords.latitude,
             lng: position.coords.longitude
@@ -685,6 +591,7 @@ export default function UserDashboardPage() {
           setLocationError(null);
         },
         (error) => {
+          console.log('Geolocation error:', error); // Debug log
           setLocationError('Unable to get your location. Some features may be limited.');
         }
       );
@@ -800,81 +707,55 @@ export default function UserDashboardPage() {
     const calculateAvailableSlots = async () => {
       const availableSlots: TimeSlot[] = [];
 
-      // Format the selected date for comparison
-      const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-
-      // Get all available stalls for the selected service type
-      const availableStalls = companyStalls.filter(stall => 
-        stall.serviceType === selectedServiceType
+      // Get all trailers for the company
+      const trailersQuery = query(
+        collection(db, 'trailers'),
+        where('companyId', '==', userCompany.id)
       );
-
-      // Sort trailers by distance if user location is available
-      let sortedTrailers = [...companyTrailers];
-      if (userLocation) {
-        sortedTrailers.sort((a, b) => {
-          const [aLat, aLng] = a.location.split(',').map(Number);
-          const [bLat, bLng] = b.location.split(',').map(Number);
-          const distanceA = calculateDistance(userLocation.lat + ',' + userLocation.lng, a.location);
-          const distanceB = calculateDistance(userLocation.lat + ',' + userLocation.lng, b.location);
-          return distanceA - distanceB;
-        });
-      }
+      const trailersSnapshot = await getDocs(trailersQuery);
+      const trailers = trailersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trailer));
 
       // Calculate time slots for each trailer
-      for (const trailer of sortedTrailers) {
+      for (const trailer of trailers) {
         // Parse start and end times
         const [startHour, startMinute] = trailer.startTime.split(':').map(Number);
         const [endHour, endMinute] = trailer.endTime.split(':').map(Number);
 
         // Create Date objects for start and end times
-        // Use a new Date object to avoid modifying the original
         const startTime = new Date(selectedDate);
         startTime.setHours(startHour, startMinute, 0, 0);
 
         const endTime = new Date(selectedDate);
         endTime.setHours(endHour, endMinute, 0, 0);
-        // Get stalls for this trailer
-        const trailerStalls = availableStalls.filter(stall => stall.trailerGroup === trailer.id);
-        
-        if (trailerStalls.length === 0) {
-          continue;
-        }
-        
-        // Calculate time slots based on stall settings
-        for (const stall of trailerStalls) {
-          const duration = stall.duration || 30; // Default to 30 minutes if not set
-          const bufferTime = stall.bufferTime || 15; // Default to 15 minutes if not set
-          const totalSlotDuration = duration + bufferTime;
 
-          let currentTime = startTime;
-          while (currentTime < endTime) {
-            // Format time in 24-hour format
-            const timeSlot = format(currentTime, 'HH:mm');
-            
-            // Check if this time slot is already booked for this specific stall
-            const isBooked = appointments.length > 0 && appointments.some(appointment => {
-              const appointmentDate = format(appointment.date, 'yyyy-MM-dd');
-              const matches = appointmentDate === selectedDateStr &&
-                appointment.startTime === timeSlot &&
-                appointment.stallId === stall.id;
-              
-              return matches;
+        // Default duration and buffer time
+        const duration = 30; // Default to 30 minutes
+        const bufferTime = 15; // Default to 15 minutes
+        const totalSlotDuration = duration + bufferTime;
+
+        let currentTime = startTime;
+        while (currentTime < endTime) {
+          // Format time in 24-hour format
+          const timeSlot = format(currentTime, 'HH:mm');
+          
+          // Check if this time slot is already booked
+          const isBooked = appointments.some(appointment => {
+            const appointmentDate = format(appointment.date, 'yyyy-MM-dd');
+            const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+            return appointmentDate === selectedDateStr && appointment.startTime === timeSlot;
+          });
+
+          if (!isBooked) {
+            // Add the time slot
+            availableSlots.push({
+              time: timeSlot,
+              duration: duration,
+              bufferTime: bufferTime
             });
-
-            if (!isBooked) {
-              // Add the time slot with stall and trailer information
-              availableSlots.push({
-                time: timeSlot,
-                stallId: stall.id,
-                trailerId: trailer.id,
-                duration: duration,
-                bufferTime: bufferTime
-              });
-            }
-
-            // Move to next time slot
-            currentTime = new Date(currentTime.getTime() + totalSlotDuration * 60000);
           }
+
+          // Move to next time slot
+          currentTime = new Date(currentTime.getTime() + totalSlotDuration * 60000);
         }
       }
 
@@ -884,15 +765,10 @@ export default function UserDashboardPage() {
       );
 
       setAvailableTimeSlots(uniqueSlots);
-      
-      // Show booking form if there are available slots
-      if (uniqueSlots.length > 0) {
-        setShowBookingForm(true);
-      }
     };
 
     calculateAvailableSlots();
-  }, [selectedDate, selectedServiceType, userCompany, companyStalls, companyTrailers, appointments, userLocation]);
+  }, [selectedDate, selectedServiceType, userCompany, appointments]);
 
   const [userMessages, setUserMessages] = useState<any[]>([]);
 
@@ -1019,7 +895,7 @@ export default function UserDashboardPage() {
       const appointment = {
         userId: user.id,
         companyId: userCompany.id,
-        stallId: appointmentData.stallId,
+        stallId: 'Unassigned',
         trailerId: appointmentData.trailerId,
         date: appointmentDate,
         startTime: appointmentData.startTime,
@@ -1031,7 +907,6 @@ export default function UserDashboardPage() {
         updatedAt: new Date()
       } as Omit<Appointment, 'id'>;
       
-      
       // Create Timestamp directly from date components to avoid timezone issues
       const timestamp = Timestamp.fromMillis(appointmentDate.getTime());
       
@@ -1042,16 +917,14 @@ export default function UserDashboardPage() {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
-            
-      // Get the stall and trailer for the appointment
-      const stallDoc = await getDoc(doc(db, 'stalls', appointment.stallId));
+      
+      // Get the trailer for the appointment
       const trailerDoc = await getDoc(doc(db, 'trailers', appointment.trailerId));
       
-      if (!stallDoc.exists() || !trailerDoc.exists()) {
-        throw new Error('Stall or trailer not found');
+      if (!trailerDoc.exists()) {
+        throw new Error('Trailer not found');
       }
       
-      const stall = stallDoc.data() as Stall;
       const trailer = trailerDoc.data() as Trailer;
       
       // Create appointment with details
@@ -1068,8 +941,8 @@ export default function UserDashboardPage() {
           createdAt: user.createdAt,
           updatedAt: user.updatedAt
         },
-        stall: stallDoc.exists() ? stallDoc.data() as Stall : null,
-        trailer: trailerDoc.exists() ? trailerDoc.data() as Trailer : null
+        stall: null,
+        trailer: trailer
       };
       
       // Update appointments state

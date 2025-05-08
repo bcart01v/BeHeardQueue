@@ -9,4 +9,6 @@ export interface Trailer {
   duration?: number; // Duration of each appointment in minutes (optional)
   createdAt: Date;
   updatedAt: Date;
+  lat?: number;
+  lng?: number;
 }

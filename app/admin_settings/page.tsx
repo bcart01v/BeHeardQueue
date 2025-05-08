@@ -41,8 +41,32 @@ interface User {
   phone?: string;
 }
 
+// Helper function to geocode an address
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) throw new Error('Google Maps API key is not configured');
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+    );
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    if (data.status === 'OK' && data.results && data.results[0]) {
+      const { lat, lng } = data.results[0].geometry.location;
+      return { lat, lng };
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error('Error geocoding address:', error);
+    return null;
+  }
+}
+
 export default function AdminPage() {
   const { authorized, loading } = useAdminGuard();
+
+  // All hooks must be declared before any return
   const [isLoading, setIsLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<Company>({
     id: '',
@@ -158,43 +182,7 @@ export default function AdminPage() {
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [editingProfilePhotoFile, setEditingProfilePhotoFile] = useState<File | null>(null);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#131b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!authorized) return null;
-
-  // Fetch initial data
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        if (auth.currentUser) {
-          const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-          if (userDoc.exists()) {
-            setCurrentUser(userDoc.data() as User);
-          }
-        }
-        await Promise.all([
-          fetchCompanySettings(),
-          fetchTrailers(),
-          fetchStalls(),
-          fetchUsers(),
-          fetchCompanies()
-        ]);
-      } catch (error) {
-        console.error('Error initializing data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initializeData();
-  }, []);
-
+  // Move fetch functions above useEffect
   const fetchCompanySettings = async () => {
     const settingsDoc = await getDocs(collection(db, 'companySettings'));
     if (!settingsDoc.empty) {
@@ -293,21 +281,6 @@ export default function AdminPage() {
     }
   };
 
-  const paginatedUsers = users.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(totalUsers / itemsPerPage);
-
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
   const fetchCompanies = async () => {
     try {
       const companiesSnapshot = await getDocs(collection(db, 'companies'));
@@ -342,6 +315,179 @@ export default function AdminPage() {
       setCompanies(companiesData);
     } catch (error) {
       console.error('Error fetching companies:', error);
+    }
+  };
+
+  // All useEffect hooks must also be before any return
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        if (auth.currentUser) {
+          const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+          if (userDoc.exists()) {
+            setCurrentUser(userDoc.data() as User);
+          }
+        }
+        await Promise.all([
+          fetchCompanySettings(),
+          fetchTrailers(),
+          fetchStalls(),
+          fetchUsers(),
+          fetchCompanies()
+        ]);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    initializeData();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(event.target as Node) &&
+        locationInputRef.current &&
+        !locationInputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const sectionId = entry.target.id;
+            setActiveSection(sectionId);
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '-10% 0px -90% 0px',
+        threshold: [0, 0.25, 0.5, 0.75, 1]
+      }
+    );
+    // Observe all sections
+    const sections = [
+      companySettingsRef.current,
+      trailersRef.current,
+      stallsRef.current,
+      usersRef.current,
+      signUpLinksRef.current
+    ].filter(Boolean);
+    sections.forEach((section) => {
+      if (section) {
+        observer.observe(section);
+      }
+    });
+    // Add scroll event listener as backup
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 100; // Offset for better detection
+      sections.forEach((section) => {
+        if (section) {
+          const sectionTop = section.offsetTop;
+          const sectionHeight = section.offsetHeight;
+          const sectionId = section.id;
+          if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
+            setActiveSection(sectionId);
+          }
+        }
+      });
+    };
+    window.addEventListener('scroll', handleScroll);
+    // Initial check
+    handleScroll();
+    return () => {
+      sections.forEach((section) => {
+        if (section) {
+          observer.unobserve(section);
+        }
+      });
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isAddingCompany && addCompanyFormRef.current) {
+      addCompanyFormRef.current.style.maxHeight = '2000px';
+      addCompanyFormRef.current.style.opacity = '1';
+      addCompanyFormRef.current.style.transform = 'translateY(0)';
+      addCompanyFormRef.current.style.pointerEvents = 'auto';
+    } else if (addCompanyFormRef.current) {
+      addCompanyFormRef.current.style.maxHeight = '0';
+      addCompanyFormRef.current.style.opacity = '0';
+      addCompanyFormRef.current.style.transform = 'translateY(-20px)';
+      addCompanyFormRef.current.style.pointerEvents = 'none';
+    }
+  }, [isAddingCompany]);
+
+  useEffect(() => {
+    if (editingCompany && editCompanyFormRef.current) {
+      editCompanyFormRef.current.style.maxHeight = '2000px';
+      editCompanyFormRef.current.style.opacity = '1';
+      editCompanyFormRef.current.style.transform = 'translateY(0)';
+      editCompanyFormRef.current.style.pointerEvents = 'auto';
+    } else if (editCompanyFormRef.current) {
+      editCompanyFormRef.current.style.maxHeight = '0';
+      editCompanyFormRef.current.style.opacity = '0';
+      editCompanyFormRef.current.style.transform = 'translateY(-20px)';
+      editCompanyFormRef.current.style.pointerEvents = 'none';
+    }
+  }, [editingCompany]);
+
+  useEffect(() => {
+    if (showSuggestions && locationInputRef.current && suggestionsRef.current) {
+      console.log('Positioning dropdown');
+      const inputRect = locationInputRef.current.getBoundingClientRect();
+      suggestionsRef.current.style.position = 'fixed';
+      suggestionsRef.current.style.top = `${inputRect.bottom + window.scrollY + 4}px`;
+      suggestionsRef.current.style.left = `${inputRect.left}px`;
+      suggestionsRef.current.style.width = `${inputRect.width}px`;
+      console.log('Dropdown positioned at:', {
+        top: suggestionsRef.current.style.top,
+        left: suggestionsRef.current.style.left,
+        width: suggestionsRef.current.style.width
+      });
+    }
+  }, [showSuggestions, locationSuggestions]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#131b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authorized) return null;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
+        <div className="text-xl text-[#ffa300]">Loading...</div>
+      </div>
+    );
+  }
+
+  const paginatedUsers = users.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(totalUsers / itemsPerPage);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
     }
   };
 
@@ -395,13 +541,21 @@ export default function AdminPage() {
     }
 
     try {
+      // Geocode the address to get lat/lng
+      const geo = await geocodeAddress(newTrailer.location);
+      if (!geo) {
+        alert('Could not determine latitude/longitude for this address. Please check the address and try again.');
+        return;
+      }
       const trailerData = {
         name: newTrailer.name,
         companyId: currentCompany?.id || '',
         startTime: newTrailer.startTime,
         endTime: newTrailer.endTime,
         stalls: [],
-        location: newTrailer.location,
+        location: newTrailer.location, // full address
+        lat: geo.lat,
+        lng: geo.lng,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -515,6 +669,16 @@ export default function AdminPage() {
     try {
       const trailerRef = doc(db, 'trailers', trailer.id);
       const now = Timestamp.now();
+      // Geocode if location (address) has changed
+      let lat = trailer.lat;
+      let lng = trailer.lng;
+      if (trailer.location) {
+        const geo = await geocodeAddress(trailer.location);
+        if (geo) {
+          lat = geo.lat;
+          lng = geo.lng;
+        }
+      }
       await updateDoc(trailerRef, {
         name: trailer.name,
         companyId: trailer.companyId,
@@ -522,9 +686,11 @@ export default function AdminPage() {
         endTime: trailer.endTime || '17:00',
         stalls: trailer.stalls,
         location: trailer.location,
+        lat,
+        lng,
         updatedAt: now
       });
-      setTrailers(prev => prev.map(t => t.id === trailer.id ? { ...trailer, updatedAt: now.toDate() } : t));
+      setTrailers(prev => prev.map(t => t.id === trailer.id ? { ...trailer, lat, lng, updatedAt: now.toDate() } : t));
       setEditingTrailer(null);
     } catch (error) {
       console.error('Error updating trailer:', error);
@@ -709,37 +875,6 @@ export default function AdminPage() {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(event.target as Node) &&
-        locationInputRef.current &&
-        !locationInputRef.current.contains(event.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const scrollToSection = (sectionId: string) => {
-    setActiveSection(sectionId);
-    const sectionRef = {
-      'company-settings': companySettingsRef,
-      'trailers': trailersRef,
-      'stalls': stallsRef,
-      'users': usersRef,
-      'sign-up-links': signUpLinksRef
-    }[sectionId];
-
-    if (sectionRef?.current) {
-      sectionRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>, isEditing: boolean = false) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -860,70 +995,6 @@ export default function AdminPage() {
       alert('Failed to delete user');
     }
   };
-
-  // Add this useEffect for the intersection observer and scroll handling
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const sectionId = entry.target.id;
-            setActiveSection(sectionId);
-          }
-        });
-      },
-      {
-        root: null,
-        rootMargin: '-10% 0px -90% 0px',
-        threshold: [0, 0.25, 0.5, 0.75, 1]
-      }
-    );
-
-    // Observe all sections
-    const sections = [
-      companySettingsRef.current,
-      trailersRef.current,
-      stallsRef.current,
-      usersRef.current,
-      signUpLinksRef.current
-    ].filter(Boolean);
-
-    sections.forEach((section) => {
-      if (section) {
-        observer.observe(section);
-      }
-    });
-
-    // Add scroll event listener as backup
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY + 100; // Offset for better detection
-
-      sections.forEach((section) => {
-        if (section) {
-          const sectionTop = section.offsetTop;
-          const sectionHeight = section.offsetHeight;
-          const sectionId = section.id;
-
-          if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
-            setActiveSection(sectionId);
-          }
-        }
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    // Initial check
-    handleScroll();
-
-    return () => {
-      sections.forEach((section) => {
-        if (section) {
-          observer.unobserve(section);
-        }
-      });
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   const handleCreateCompany = async () => {
     try {
@@ -1051,45 +1122,6 @@ export default function AdminPage() {
     }
   };
 
-  // Add this useEffect for animation
-  useEffect(() => {
-    if (isAddingCompany && addCompanyFormRef.current) {
-      addCompanyFormRef.current.style.maxHeight = '2000px';
-      addCompanyFormRef.current.style.opacity = '1';
-      addCompanyFormRef.current.style.transform = 'translateY(0)';
-      addCompanyFormRef.current.style.pointerEvents = 'auto';
-    } else if (addCompanyFormRef.current) {
-      addCompanyFormRef.current.style.maxHeight = '0';
-      addCompanyFormRef.current.style.opacity = '0';
-      addCompanyFormRef.current.style.transform = 'translateY(-20px)';
-      addCompanyFormRef.current.style.pointerEvents = 'none';
-    }
-  }, [isAddingCompany]);
-
-  // Add this useEffect for edit animation
-  useEffect(() => {
-    if (editingCompany && editCompanyFormRef.current) {
-      editCompanyFormRef.current.style.maxHeight = '2000px';
-      editCompanyFormRef.current.style.opacity = '1';
-      editCompanyFormRef.current.style.transform = 'translateY(0)';
-      editCompanyFormRef.current.style.pointerEvents = 'auto';
-    } else if (editCompanyFormRef.current) {
-      editCompanyFormRef.current.style.maxHeight = '0';
-      editCompanyFormRef.current.style.opacity = '0';
-      editCompanyFormRef.current.style.transform = 'translateY(-20px)';
-      editCompanyFormRef.current.style.pointerEvents = 'none';
-    }
-  }, [editingCompany]);
-
-  // Helper function to convert 24-hour time to 12-hour format
-  const formatTimeTo12Hour = (time: string) => {
-    const [hours, minutes] = time.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-  };
-
   const handleCreateTrailer = async () => {
     try {
       if (!currentCompany) {
@@ -1172,30 +1204,28 @@ export default function AdminPage() {
     }
   };
 
-  // Add this useEffect to handle dropdown positioning
-  useEffect(() => {
-    if (showSuggestions && locationInputRef.current && suggestionsRef.current) {
-      console.log('Positioning dropdown');
-      const inputRect = locationInputRef.current.getBoundingClientRect();
-      suggestionsRef.current.style.position = 'fixed';
-      suggestionsRef.current.style.top = `${inputRect.bottom + window.scrollY + 4}px`;
-      suggestionsRef.current.style.left = `${inputRect.left}px`;
-      suggestionsRef.current.style.width = `${inputRect.width}px`;
-      console.log('Dropdown positioned at:', {
-        top: suggestionsRef.current.style.top,
-        left: suggestionsRef.current.style.left,
-        width: suggestionsRef.current.style.width
-      });
-    }
-  }, [showSuggestions, locationSuggestions]);
+  // Helper function to convert 24-hour time to 12-hour format
+  const formatTimeTo12Hour = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
-      </div>
-    );
-  }
+  const scrollToSection = (sectionId: string) => {
+    setActiveSection(sectionId);
+    const sectionRef = {
+      'company-settings': companySettingsRef,
+      'trailers': trailersRef,
+      'stalls': stallsRef,
+      'users': usersRef,
+      'sign-up-links': signUpLinksRef
+    }[sectionId];
+    if (sectionRef?.current) {
+      sectionRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#1e1b1b]">
