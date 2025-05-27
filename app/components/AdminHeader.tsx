@@ -8,6 +8,8 @@ import { collection, query, getDocs, doc, getDoc, updateDoc } from 'firebase/fir
 import { db } from '@/lib/firebase';
 import { logout } from '@/lib/auth';
 import { UserRole } from '@/types/user';
+import { useTheme } from '../context/ThemeContext';
+import ThemeToggle from './ThemeToggle';
 
 interface Company {
   id: string;
@@ -22,6 +24,7 @@ export default function AdminHeader() {
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
   const [showCompanySelector, setShowCompanySelector] = useState(false);
   const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const { theme } = useTheme();
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -96,7 +99,7 @@ export default function AdminHeader() {
         // Refresh the page after switching to user role
         window.location.reload();
       } else {
-        router.push('/admin_home');
+        router.push('/resource_home');
         // Also refresh the page after switching to admin role
         window.location.reload();
       }
@@ -120,16 +123,17 @@ export default function AdminHeader() {
   }
 
   return (
-    <header className="fixed top-0 left-0 right-0 bg-[#3e2802] shadow-lg z-50">
+    <header className={`fixed top-0 left-0 right-0 ${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} shadow-lg z-50`}>
       <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
           <Link href="/admin_home" className="flex items-center space-x-3">
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa300]">BeHeard Queue</h1>
+            <h1 className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>BeHeard Queue</h1>
           </Link>
           
           <div className="flex items-center space-x-4">
             {!loading && user && (
               <div className="flex items-center space-x-4">
+                <ThemeToggle />
                 <div className="text-right hidden">
                   <p className="text-sm text-[#ffa300]">Admin</p>
                   <p className="font-semibold text-lg text-[#ffa300]">
@@ -147,13 +151,13 @@ export default function AdminHeader() {
                     Admin Home
                   </Link>
                   <Link
-                    href="/admin_dashboard"
+                    href="/resource_dashboard"
                     className="bg-[#ffa300] text-[#3e2802] px-3 py-1.5 rounded-md hover:bg-[#e69200] transition-colors duration-200 text-sm flex items-center"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
-                    Today's Dashboard
+                    Resource Dashboard
                   </Link>
                   <Link
                     href="/admin_settings"
@@ -241,14 +245,14 @@ export default function AdminHeader() {
                         Admin Home
                       </Link>
                       <Link
-                        href="/admin_dashboard"
+                        href="/resource_dashboard"
                         onClick={() => setShowMobileMenu(false)}
                         className="w-full text-left px-4 py-2 text-sm text-[#ffa300] hover:bg-[#3e2802] flex items-center"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
-                        Today's Dashboard
+                        Resource Dashboard
                       </Link>
                       <Link
                         href="/admin_settings"

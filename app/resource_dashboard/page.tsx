@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { collection, getDocs, query, where, doc, getDoc, onSnapshot, updateDoc, Timestamp, addDoc, orderBy, limit, writeBatch, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, onSnapshot, updateDoc, Timestamp, addDoc, orderBy, limit, writeBatch, DocumentData, QueryDocumentSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth, storage } from '@/lib/firebase';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
@@ -11,6 +11,8 @@ import { ServiceType } from '@/types/stall';
 import { Stall } from '@/types/stall';
 import { Trailer } from '@/types/trailer';
 import { AppointmentWithDetails } from '@/types/appointment';
+import type { IntakeForm } from '@/types/intakeForm';
+import IntakeFormComponent from '@/app/components/IntakeForm';
 import { 
   ArrowLeftIcon, 
   CheckCircleIcon, 
@@ -788,12 +790,14 @@ function NewUserFormModal({
   isOpen,
   onClose,
   onUserCreate,
-  companyId
+  companyId,
+  selectedTimeSlot
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onUserCreate: (user: User) => void;
+  onUserCreate: (user: User, selectedTimeSlot?: {time: string, stallId: string, trailerId: string} | null) => void;
   companyId: string;
+  selectedTimeSlot?: {time: string, stallId: string, trailerId: string} | null;
 }) {
   const [form, setForm] = useState<NewUserForm>({
     firstName: '',
@@ -805,6 +809,8 @@ function NewUserFormModal({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showIntakeForm, setShowIntakeForm] = useState(false);
+  const [createdUser, setCreatedUser] = useState<User | null>(null);
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -829,7 +835,8 @@ function NewUserFormModal({
       const now = Timestamp.now();
 
       // Create user in Firebase
-      const userData = {
+      const userData: User = {
+        id: '', // Will be set after doc creation
         firstName: form.firstName,
         lastName: form.lastName,
         email: form.email,
@@ -837,8 +844,9 @@ function NewUserFormModal({
         profilePhoto: photoURL,
         role: 'user',
         companyId,
-        createdAt: now,
-        updatedAt: now
+        createdAt: now.toDate(),
+        updatedAt: now.toDate(),
+        completedIntake: false // Set to false initially
       };
 
       const userRef = await addDoc(collection(db, 'users'), userData);
@@ -855,18 +863,18 @@ function NewUserFormModal({
         }),
       });
 
-      if (!bubbleResponse.ok) {
-        throw new Error('Failed to create user in Bubble');
-      }
+      // If Bubble creation fails, do not throw or notify, just continue
+      // if (!bubbleResponse.ok) {
+      //   throw new Error('Failed to create user in Bubble');
+      // }
 
-      const newUser = {
-        id: userRef.id,
+      const newUser: User = {
         ...userData,
-        createdAt: now.toDate(),
-        updatedAt: now.toDate()
-      } as User;
+        id: userRef.id
+      };
 
-      onUserCreate(newUser);
+      setCreatedUser(newUser);
+      setShowIntakeForm(true);
     } catch (error) {
       console.error('Error creating user:', error);
       setError('Failed to create user. Please try again.');
@@ -875,7 +883,63 @@ function NewUserFormModal({
     }
   };
 
+  const handleIntakeFormSubmit = async (userData: Partial<User>, intakeData: Partial<IntakeForm>) => {
+    try {
+      if (!createdUser) return;
+
+      // Update user data with intake form data and set completedIntake to true
+      await setDoc(doc(db, 'users', createdUser.id), {
+        ...createdUser,
+        ...userData,
+        completedIntake: true,
+        updatedAt: new Date()
+      });
+
+      // Create intake form document
+      await setDoc(doc(db, 'intakeForms', createdUser.id), {
+        ...intakeData,
+        userId: createdUser.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Call the original onUserCreate callback with the updated user and selectedTimeSlot
+      onUserCreate({
+        ...createdUser,
+        ...userData,
+        completedIntake: true
+      }, selectedTimeSlot);
+    } catch (error) {
+      console.error('Error saving intake form:', error);
+      setError('Failed to save intake form. Please try again.');
+    }
+  };
+
   if (!isOpen) return null;
+
+  if (showIntakeForm && createdUser) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-[#ffa300]">Complete Intake Form</h2>
+            <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+              <XCircleIcon className="h-6 w-6" />
+            </button>
+          </div>
+          <IntakeFormComponent
+            onSubmit={handleIntakeFormSubmit}
+            onCancel={onClose}
+            initialUserData={{
+              firstName: createdUser.firstName,
+              lastName: createdUser.lastName,
+              phone: createdUser.phone || ''
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1811,7 +1875,8 @@ function AdminDashboardContent() {
             profilePhoto: authUser.profilePhoto,
             createdAt: authUser.createdAt,
             updatedAt: authUser.updatedAt,
-            displayName: authUser.displayName
+            displayName: authUser.displayName,
+            completedIntake: authUser.completedIntake ?? false // Add this line
           };
           
           console.log('Compatible user created:', compatibleUser);
@@ -2292,9 +2357,12 @@ function AdminDashboardContent() {
     setShowAppointmentModal(true);
   };
 
-  const handleNewUserCreate = (user: User) => {
+  const handleNewUserCreate = (user: User, slot?: {time: string, stallId: string, trailerId: string} | null) => {
     setSelectedUser(user);
     setShowNewUserModal(false);
+    if (slot) {
+      setSelectedTimeSlot(slot);
+    }
     setShowAppointmentModal(true);
   };
 

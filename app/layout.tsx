@@ -5,6 +5,7 @@ import { AuthProvider } from "./components/AuthContext";
 import HeaderWrapper from "./components/HeaderWrapper";
 import { headers } from 'next/headers';
 import Notifications from './components/Notifications';
+import { ThemeProvider } from './context/ThemeContext';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,13 +55,15 @@ export default async function RootLayout({
         />
       </head>
       <body className={isTVDisplay ? "bg-white" : "bg-[#1e1b1b] text-white"}>
-        <AuthProvider>
-          {!isTVDisplay && <HeaderWrapper />}
-          <main className={isTVDisplay ? "" : "min-h-screen"}>
-            <Notifications />
-            {children}
-          </main>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            {!isTVDisplay && <HeaderWrapper />}
+            <main className={isTVDisplay ? "" : "min-h-screen"}>
+              <Notifications />
+              {children}
+            </main>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

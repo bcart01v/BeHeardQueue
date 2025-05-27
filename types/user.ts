@@ -5,13 +5,19 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
+  nickname?: string;
+  phone?: string;
+  dateOfBirth?: Date;
+  race?: 'Asian' | 'Black/African' | 'Hispanic' | 'Native American' | 'Mixed';
+  gender?: 'Male' | 'Female';
+  isVeteran?: boolean;
   role: 'admin' | 'user' | 'software-owner';
   companyId: string; // The company the user belongs to
   createdAt: Date;
   updatedAt: Date;
   displayName?: string;
-  phone?: string; // User's phone number
   profilePhoto?: string; // URL to the user's profile photo
+  completedIntake: boolean; // Whether the user has completed the intake form
 }
 
 export interface Company {
