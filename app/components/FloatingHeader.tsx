@@ -10,6 +10,8 @@ import { auth } from '@/lib/firebase';
 import { updateEmail, signOut } from 'firebase/auth';
 import { User, UserRole } from '@/types/user';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useTheme } from '../context/ThemeContext';
+import ThemeToggle from './ThemeToggle';
 
 // Type guard function to check if user is admin
 function isAdmin(user: User | null): boolean {
@@ -245,6 +247,7 @@ export default function FloatingHeader() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const { theme } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -314,7 +317,7 @@ export default function FloatingHeader() {
       <header className="fixed top-0 left-0 right-0 bg-[#ffa300] shadow-md z-50">
         <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <Link href={isAdmin(user) ? "/admin_home" : "/userDashboard"} className="flex items-center space-x-3">
+            <Link href={isAdmin(user) ? "/resource_home" : "/userDashboard"} className="flex items-center space-x-3">
               <h1 className="text-xl sm:text-2xl font-bold text-[#3e2802]">BeHeard Queue</h1>
             </Link>
             
@@ -323,6 +326,7 @@ export default function FloatingHeader() {
                 <>
                   {user ? (
                     <div className="flex items-center space-x-4">
+                      <ThemeToggle />
                       <div className="text-right hidden sm:block">
                         <p className="text-sm text-[#3e2802]">Welcome back,</p>
                         <p className="font-semibold text-lg text-[#3e2802]">
@@ -342,13 +346,13 @@ export default function FloatingHeader() {
                               Company Settings
                             </Link>
                             <Link
-                              href="/admin_dashboard"
+                              href="/resource_dashboard"
                               className="bg-[#3e2802] text-[#ffa300] px-3 py-1.5 rounded-md hover:bg-[#2a1c01] transition-colors duration-200 text-sm flex items-center"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                               </svg>
-                              Today's Dashboard
+                              Resource Dashboard
                             </Link>
                           </>
                         )}
@@ -405,14 +409,14 @@ export default function FloatingHeader() {
                                   Company Settings
                                 </Link>
                                 <Link
-                                  href="/admin_dashboard"
+                                  href="/resource_dashboard"
                                   onClick={() => setShowMobileMenu(false)}
                                   className="w-full text-left px-4 py-2 text-sm text-[#ffa300] hover:bg-[#3e2802] flex items-center"
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                   </svg>
-                                  Today's Dashboard
+                                  Resource Dashboard
                                 </Link>
                               </>
                             )}
@@ -450,6 +454,7 @@ export default function FloatingHeader() {
                     </div>
                   ) : (
                     <div className="flex space-x-4">
+                      <ThemeToggle />
                       <Link 
                         href="/login" 
                         className="bg-[#3e2802] text-[#ffa300] px-3 py-1.5 rounded-md hover:bg-[#2a1c01] transition-colors duration-200 text-sm"

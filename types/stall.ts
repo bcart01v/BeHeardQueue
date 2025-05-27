@@ -1,4 +1,4 @@
-export type StallStatus = 'available' | 'in_use' | 'refreshing' | 'out_of_order';
+export type StallStatus = 'available' | 'in_use' | 'needs_cleaning' | 'refreshing' | 'out_of_order';
 export type ServiceType = 'shower' | 'laundry' | 'haircut';
 
 export interface Stall {

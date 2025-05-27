@@ -23,7 +23,7 @@ function HomeContent() {
     // If user is logged in, redirect based on role
     if (!authLoading && user) {
       if (user.role === 'admin') {
-        router.push('/admin_home');
+        router.push('/resource_home');
       } else {
         router.push('/userDashboard');
       }
