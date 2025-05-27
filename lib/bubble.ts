@@ -85,7 +85,8 @@ export function testBubbleAPI() {
         companyId: 'test-company',
         createdAt: new Date(),
         updatedAt: new Date(),
-        phone: '1234567890'
+        phone: '1234567890',
+        completedIntake: false
       };
       
       console.log('Testing Bubble API with user:', testUser);

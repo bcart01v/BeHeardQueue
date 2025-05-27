@@ -103,7 +103,8 @@ function ProfileEditModal({
         lastName,
         email,
         phone,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        completedIntake: user?.completedIntake ?? false
       });
 
       setSuccess('Profile updated successfully!');
@@ -904,7 +905,8 @@ export default function UserDashboardPage() {
         serviceType: selectedServiceType,
         duration: appointmentData.duration,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        completedIntake: user.completedIntake ?? false
       } as Omit<Appointment, 'id'>;
       
       // Create Timestamp directly from date components to avoid timezone issues
@@ -939,7 +941,8 @@ export default function UserDashboardPage() {
           role: user.role,
           companyId: user.companyId,
           createdAt: user.createdAt,
-          updatedAt: user.updatedAt
+          updatedAt: user.updatedAt,
+          completedIntake: user.completedIntake ?? false
         },
         stall: null,
         trailer: trailer
