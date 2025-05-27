@@ -43,7 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               phone: userData.phone || '',
               createdAt: userData.createdAt?.toDate() || new Date(),
               updatedAt: userData.updatedAt?.toDate() || new Date(),
-              displayName: userData.displayName || firebaseUser.displayName || undefined
+              displayName: userData.displayName || firebaseUser.displayName || undefined,
+              completedIntake: userData.completedIntake ?? false
             };
             
             setUser(user);
@@ -57,7 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role: 'user',
               companyId: '',
               createdAt: new Date(),
-              updatedAt: new Date()
+              updatedAt: new Date(),
+              completedIntake: false
             };
             
             setUser(userData as User);

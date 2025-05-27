@@ -100,7 +100,8 @@ function SignupForm() {
         role: 'user',
         companyId: companyId, // Assign user to the company from URL
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        completedIntake: false
       };
       
       await setDoc(doc(db, 'users', user.uid), userData);
