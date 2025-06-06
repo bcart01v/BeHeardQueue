@@ -19,6 +19,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { useAdminGuard } from '../hooks/useAdminGuard';
+import { useTheme } from '../context/ThemeContext';
+import { getThemeColor, getUIColor } from '../colors';
 
 interface User {
   id: string;
@@ -103,7 +105,7 @@ export default function AdminHomePage() {
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const router = useRouter();
   const { authorized, loading } = useAdminGuard();
-  const [theme, setTheme] = useState('dark');
+  const { theme } = useTheme();
 
   // Fetch initial data
   useEffect(() => {
@@ -445,101 +447,122 @@ export default function AdminHomePage() {
   }
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#1e1b1b]' : 'bg-white'} p-6`}>
+    <div className={`min-h-screen ${getThemeColor(theme, 'pageBackground')} p-6`}>
       <div className="max-w-7xl mx-auto">
-        <h1 className={`text-3xl font-bold ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} mb-8`}>Admin Dashboard</h1>
+        <h1 className={`text-3xl font-bold ${getThemeColor(theme, 'textHeader')} mb-8`}>Admin Dashboard</h1>
         
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className={`${theme === 'dark' ? 'bg-[#ffa300]' : 'bg-[#3e2802]'} rounded-lg shadow p-6`}>
+          <div className={`rounded-lg shadow p-6 transition-colors duration-200 ${getThemeColor(theme, 'cardBackground')} ${getThemeColor(theme, 'text')} ${getUIColor('hover', 'button', theme)}`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>Scheduled Showers</h3>
-              <SparklesIcon className={`h-8 w-8 ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`} />
+              <h3 className="text-lg font-semibold">Scheduled Showers</h3>
+              <SparklesIcon className="h-8 w-8" />
             </div>
             <div className="mt-4">
-              <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>{statistics.scheduledShowers}</p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'} mt-1`}>This Week</p>
+              <p className="text-3xl font-bold">{statistics.scheduledShowers}</p>
+              <p className="text-sm mt-1">This Week</p>
             </div>
           </div>
           
-          <div className={`${theme === 'dark' ? 'bg-[#ffa300]' : 'bg-[#3e2802]'} rounded-lg shadow p-6`}>
+          <div className={`rounded-lg shadow p-6 transition-colors duration-200 ${getThemeColor(theme, 'cardBackground')} ${getThemeColor(theme, 'text')} ${getUIColor('hover', 'button', theme)}`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>Scheduled Laundry</h3>
-              <TruckIcon className={`h-8 w-8 ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`} />
+              <h3 className="text-lg font-semibold">Scheduled Laundry</h3>
+              <TruckIcon className="h-8 w-8" />
             </div>
             <div className="mt-4">
-              <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>{statistics.scheduledLaundry}</p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'} mt-1`}>This Week</p>
+              <p className="text-3xl font-bold">{statistics.scheduledLaundry}</p>
+              <p className="text-sm mt-1">This Week</p>
             </div>
           </div>
           
-          <div className={`${theme === 'dark' ? 'bg-[#ffa300]' : 'bg-[#3e2802]'} rounded-lg shadow p-6`}>
+          <div className={`rounded-lg shadow p-6 transition-colors duration-200 ${getThemeColor(theme, 'cardBackground')} ${getThemeColor(theme, 'text')} ${getUIColor('hover', 'button', theme)}`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>Scheduled Haircuts</h3>
-              <ScissorsIcon className={`h-8 w-8 ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`} />
+              <h3 className="text-lg font-semibold">Scheduled Haircuts</h3>
+              <ScissorsIcon className="h-8 w-8" />
             </div>
             <div className="mt-4">
-              <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>{statistics.scheduledHaircuts}</p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'} mt-1`}>This Week</p>
+              <p className="text-3xl font-bold">{statistics.scheduledHaircuts}</p>
+              <p className="text-sm mt-1">This Week</p>
             </div>
           </div>
           
-          <div className={`${theme === 'dark' ? 'bg-[#ffa300]' : 'bg-[#3e2802]'} rounded-lg shadow p-6`}>
+          <div className={`rounded-lg shadow p-6 transition-colors duration-200 ${getThemeColor(theme, 'cardBackground')} ${getThemeColor(theme, 'text')} ${getUIColor('hover', 'button', theme)}`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>Current User Count</h3>
-              <UserGroupIcon className={`h-8 w-8 ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`} />
+              <h3 className="text-lg font-semibold">Current User Count</h3>
+              <UserGroupIcon className="h-8 w-8" />
             </div>
             <div className="mt-4">
-              <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'}`}>{statistics.userCount}</p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'} mt-1`}>Active Users</p>
+              <p className="text-3xl font-bold">{statistics.userCount}</p>
+              <p className="text-sm mt-1">Active Users</p>
             </div>
           </div>
         </div>
         
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <Link href="/resource_dashboard" className={`${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} hover:bg-[#2a1c01] ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} p-6 rounded-lg shadow transition-colors duration-200`}>
+          <Link
+            href="/resource_dashboard"
+            className={`p-6 rounded-lg shadow transition-colors duration-200
+              ${getThemeColor(theme, 'cardBackground')}
+              ${getThemeColor(theme, 'text')}
+              ${getUIColor('hover', 'button', theme)}
+            `}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Resource Dashboard</h3>
                 <p className="text-sm mt-1">View and manage resources</p>
               </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
           </Link>
-          <Link href="/admin_settings" className={`${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} hover:bg-[#2a1c01] ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} p-6 rounded-lg shadow transition-colors duration-200`}>
+
+          <Link
+            href="/admin_settings"
+            className={`p-6 rounded-lg shadow transition-colors duration-200
+              ${getThemeColor(theme, 'cardBackground')}
+              ${getThemeColor(theme, 'text')}
+              ${getUIColor('hover', 'button', theme)}
+            `}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Company Settings</h3>
                 <p className="text-sm mt-1">Manage company settings</p>
               </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
           </Link>
         </div>
-        
+ 
         {/* Future Appointments */}
         <div className="mb-8">
-          <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>Future Appointments</h2>
+          <h2 className={`text-2xl font-bold ${getThemeColor(theme, 'text')}`}>Future Appointments</h2>
           <div className="flex items-center space-x-4 mt-4">
             <button
               onClick={() => handleDateChange('prev')}
-              className={`p-2 rounded-full ${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} hover:bg-[#2a1c01] ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} transition-colors duration-200`}
+              className={`p-2 rounded-full
+                ${getUIColor('button', 'primary', theme)}
+                ${getUIColor('hover', 'button', theme)}
+                transition-colors duration-200`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <span className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>
+            <span className={`${getThemeColor(theme, 'text')}`}>
               {format(startDate, 'MMM d')} - {format(endDate, 'MMM d, yyyy')}
             </span>
             <button
               onClick={() => handleDateChange('next')}
-              className={`p-2 rounded-full ${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} hover:bg-[#2a1c01] ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} transition-colors duration-200`}
+              className={`p-2 rounded-full
+                ${getUIColor('button', 'primary', theme)}
+                ${getUIColor('hover', 'button', theme)}
+                transition-colors duration-200`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -551,19 +574,19 @@ export default function AdminHomePage() {
         {/* Appointments List */}
         <div className="space-y-6">
           {loading ? (
-            <div className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>Loading appointments...</div>
+            <div className={`${getThemeColor(theme, 'text')}`}>Loading appointments...</div>
           ) : Object.keys(futureAppointments).length === 0 ? (
-            <div className={`${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} rounded-lg p-6 text-center`}>
-              <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>No appointments found for the selected date range.</p>
+            <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 text-center`}>
+              <p className={`${getThemeColor(theme, 'text')}`}>No appointments found for the selected date range.</p>
             </div>
           ) : (
             Object.keys(futureAppointments).sort().map(dateStr => (
-              <div key={dateStr} className={`${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} rounded-lg overflow-hidden`}>
-                <div className={`${theme === 'dark' ? 'bg-[#2a1c01]' : 'bg-[#3e2802]'} p-4`}>
-                  <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>{formatDateDisplay(dateStr)}</h3>
+              <div key={dateStr} className={`${getThemeColor(theme, 'cardBackground')} rounded-lg overflow-hidden`}>
+                <div className={`${getThemeColor(theme, 'surface')} p-4`}>
+                 <h3 className={`text-lg font-semibold ${theme === 'dark' ? getThemeColor(theme, 'textWhite') : getThemeColor(theme, 'textHeader')}`}>{formatDateDisplay(dateStr)}</h3>
                 </div>
                 <div className="p-4">
-                  <h4 className={`text-md font-medium ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} mb-2`}>
+                  <h4 className={`text-md font-medium ${getThemeColor(theme, 'text')} mb-2`}>
                     {futureAppointments[dateStr].length} Appointment{futureAppointments[dateStr].length !== 1 ? 's' : ''}
                   </h4>
                   <div className="space-y-2">
@@ -571,19 +594,21 @@ export default function AdminHomePage() {
                       <div
                         key={appointment.id}
                         onClick={() => handleAppointmentClick(appointment)}
-                        className={`flex items-center justify-between ${theme === 'dark' ? 'bg-[#1e1b1b]' : 'bg-white'} p-3 rounded-md cursor-pointer hover:bg-[#2a1c01] transition-colors duration-200`}
+                        className={`flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors duration-200
+                          ${theme === 'dark' ? 'bg-[#131b1b]' : 'bg-white'}
+                          ${getUIColor('hover', 'table', theme)}`}
                       >
                         <div className="flex items-center space-x-3">
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(appointment.status)}`} />
-                          <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} font-medium capitalize`}>
+                          <p className={`font-medium capitalize ${getThemeColor(theme, 'text')}`}>
                             {appointment.serviceType}
                           </p>
                         </div>
                         <div className="flex items-center space-x-4">
-                          <span className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>
+                          <span className={getThemeColor(theme, 'text')}>
                             {appointment.startTime} - {appointment.endTime}
                           </span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${getThemeColor(theme, 'text')}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
@@ -599,13 +624,13 @@ export default function AdminHomePage() {
         {/* Appointment Details Modal */}
         {selectedAppointment && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className={`${theme === 'dark' ? 'bg-[#3e2802]' : 'bg-[#ffa300]'} rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto`}>
+            <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto`}>
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>Appointment Details</h3>
+                  <h3 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Appointment Details</h3>
                   <button
                     onClick={() => setSelectedAppointment(null)}
-                    className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} hover:text-white transition-colors duration-200`}
+                    className={`${getThemeColor(theme, 'text')} hover:text-white transition-colors duration-200`}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -614,38 +639,38 @@ export default function AdminHomePage() {
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} font-medium`}>{selectedAppointment.userName}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>User</p>
+                    <p className={`${getThemeColor(theme, 'text')} font-medium`}>{selectedAppointment.userName}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>User</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} font-medium capitalize`}>{selectedAppointment.serviceType}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Service Type</p>
+                    <p className={`${getThemeColor(theme, 'text')} font-medium capitalize`}>{selectedAppointment.serviceType}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Service Type</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>{format(selectedAppointment.date, 'EEEE, MMMM d, yyyy')}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Date</p>
+                    <p className={`${getThemeColor(theme, 'text')}`}>{format(selectedAppointment.date, 'EEEE, MMMM d, yyyy')}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Date</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>{selectedAppointment.startTime} - {selectedAppointment.endTime}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Time</p>
+                    <p className={`${getThemeColor(theme, 'text')}`}>{selectedAppointment.startTime} - {selectedAppointment.endTime}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Time</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>{selectedAppointment.stallName}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Location</p>
+                    <p className={`${getThemeColor(theme, 'text')}`}>{selectedAppointment.stallName}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Location</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} font-mono text-sm`}>{selectedAppointment.id}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Appointment ID</p>
+                    <p className={`${getThemeColor(theme, 'text')} font-mono text-sm`}>{selectedAppointment.id}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Appointment ID</p>
                   </div>
                   <div>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'}`}>{format(selectedAppointment.createdAt, 'MMM d, yyyy h:mm a')}</p>
-                    <p className={`${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} text-sm`}>Created At</p>
+                    <p className={`${getThemeColor(theme, 'text')}`}>{format(selectedAppointment.createdAt, 'MMM d, yyyy h:mm a')}</p>
+                    <p className={`${getThemeColor(theme, 'text')} text-sm`}>Created At</p>
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={() => setSelectedAppointment(null)}
-                    className={`px-4 py-2 ${theme === 'dark' ? 'bg-[#1e1b1b]' : 'bg-[#f3f4f6]'} ${theme === 'dark' ? 'text-[#ffa300]' : 'text-[#3e2802]'} rounded-md hover:bg-[#2a1c01] transition-colors duration-200`}
+                    className={`px-4 py-2 ${getUIColor('button', 'secondary', theme)} rounded-md ${getUIColor('hover', 'button', theme)}`}
                   >
                     Close
                   </button>
@@ -654,7 +679,7 @@ export default function AdminHomePage() {
                       router.push(`/resource_dashboard?appointment=${selectedAppointment.id}&date=${format(selectedAppointment.date, 'yyyy-MM-dd')}`);
                       setSelectedAppointment(null);
                     }}
-                    className={`px-4 py-2 ${theme === 'dark' ? 'bg-[#ffa300]' : 'bg-[#3e2802]'} ${theme === 'dark' ? 'text-[#3e2802]' : 'text-[#ffa300]'} rounded-md hover:bg-[#e69200] transition-colors duration-200`}
+                    className={`px-4 py-2 ${getUIColor('button', 'primary', theme)} rounded-md ${getUIColor('hover', 'button', theme)}`}
                   >
                     View in Dashboard
                   </button>

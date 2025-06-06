@@ -32,6 +32,8 @@ import { format, parseISO } from 'date-fns';
 import { useSearchParams } from 'next/navigation';
 import { useAdminGuard } from '../hooks/useAdminGuard';
 import SendMessageForm from '@/app/components/SendMessageForm';
+import { getThemeColor, getUIColor, themeColors } from '../colors';
+import { useTheme } from '../context/ThemeContext';
 
 // Add these interfaces near the top with other interfaces
 interface DragItem {
@@ -301,15 +303,18 @@ const StallGrid: React.FC<StallGridProps> = ({
     e.dataTransfer.dropEffect = 'move';
   };
 
+  const { theme } = useTheme();
+  
+
   return (
     <>
-      <div className="flex flex-col border border-[#ffa300] rounded-xl bg-[#1e1b1b] overflow-hidden" ref={gridRef}>
+      <div className={`flex flex-col ${getThemeColor(theme, 'border')} ${getThemeColor(theme, 'cardBackground')} rounded-xl overflow-hidden`} ref={gridRef}>
         {/* Header - Trailers and Stalls - Add padding right to account for scrollbar */}
-        <div className="flex border-b border-[#ffa300] pr-[17px]">
-          <div className="w-24 flex-shrink-0 bg-[#1e1b1b] text-white font-bold p-2 text-center border-r border-[#ffa300]">Time</div>
+        <div className={`flex border-b ${getThemeColor(theme, 'border')} pr-[17px]`}>
+          <div className={`w-24 flex-shrink-0  ${getThemeColor(theme, 'cardBackground')} text-white font-bold p-2 text-center border-r ${getThemeColor(theme, 'border')}`}>Time</div>
           {filteredTrailers.map(trailer => (
             <div key={trailer.id} className="flex-1">
-              <div className="text-center font-bold p-2 bg-[#1e1b1b] text-white border-b border-[#ffa300]">{trailer.name}</div>
+              <div className={`text-center font-bold p-2 ${getThemeColor(theme, 'cardBackground')} text-white border-b ${getThemeColor(theme, 'border')}`}>{trailer.name}</div>
               <div className="flex">
                 {filteredStalls.filter(stall => stall.trailerGroup === trailer.id)
                   .map(stall => {
@@ -318,8 +323,8 @@ const StallGrid: React.FC<StallGridProps> = ({
                     return (
                       <div key={stall.id} className="flex-1">
                         <div 
-                          className={`h-12 border-r border-[#ffa300] ${
-                            stall.serviceType === 'shower' ? getStatusColor(stallStatus.status) : 'bg-[#1e1b1b]'
+                          className={`h-12 border-r ${getThemeColor(theme, 'border')} ${
+                            stall.serviceType === 'shower' ? getStatusColor(stallStatus.status) : getThemeColor(theme, 'cardBackground')
                           } relative group ${stall.serviceType === 'shower' ? 'cursor-pointer' : ''}`}
                           onClick={() => stall.serviceType === 'shower' && setShowStatusMenuStallId(stall.id)}
                         >
@@ -331,12 +336,12 @@ const StallGrid: React.FC<StallGridProps> = ({
                         {/* Status Selection Modal */}
                         {showStatusMenuStallId === stall.id && stall.serviceType === 'shower' && (
                           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div className="bg-[#1e1b1b] rounded-lg p-6 w-full max-w-sm">
+                            <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 w-full max-w-sm`}>
                               <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold text-[#ffa300]">Update Status: {stall.name}</h3>
+                                <h3 className={`text-xl font-bold ${getThemeColor(theme, 'text')}`}>Update Status: {stall.name}</h3>
                                 <button 
                                   onClick={() => setShowStatusMenuStallId(null)}
-                                  className="text-[#ffa300] hover:text-[#ffb733]"
+                                  className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}
                                 >
                                   <XCircleIcon className="h-6 w-6" />
                                 </button>
@@ -381,10 +386,10 @@ const StallGrid: React.FC<StallGridProps> = ({
           {timeSlots.map((time, index) => (
             <div 
               key={time} 
-              className="flex border-b border-[#ffa300] relative"
+              className={`flex border-b ${getThemeColor(theme, 'border')} relative`}
               data-time-index={index}
             >
-              <div className="w-24 flex-shrink-0 p-2 text-sm font-medium text-white bg-[#1e1b1b] border-r border-[#ffa300] sticky left-0 z-10">
+              <div className={`w-24 flex-shrink-0 p-2 text-sm font-medium text-white bg-[#1e1b1b] border-r border-[#ffa300] border-l-2 ${getThemeColor(theme, 'border')} sticky left-0 z-10`}>
                 {formatTimeForDisplay(time)}
               </div>
               {filteredTrailers.map(trailer => (
@@ -396,7 +401,7 @@ const StallGrid: React.FC<StallGridProps> = ({
                       return (
                         <div 
                           key={`${stall.id}-${time}`} 
-                          className={`flex-1 h-12 border-r border-[#ffa300] ${
+                          className={`flex-1 h-12 border-r ${getThemeColor(theme, 'border')} ${
                             selectedTimeSlot && 
                             selectedTimeSlot.time === time && 
                             selectedTimeSlot.stallId === stall.id
@@ -405,7 +410,7 @@ const StallGrid: React.FC<StallGridProps> = ({
                           } ${
                             appointment 
                               ? getStatusColor(appointment.status)
-                              : 'bg-[#1e1b1b]'
+                              : getThemeColor(theme, 'cardBackground')
                           } relative group cursor-pointer`}
                           onClick={() => handleTimeSlotClick(time, stall.id, trailer.id, appointment)}
                           onDrop={(e) => handleDrop(e, time, stall.id, trailer.id)}
@@ -443,12 +448,12 @@ const StallGrid: React.FC<StallGridProps> = ({
       {/* Appointment Popup Modal */}
       {selectedGridAppointment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#3e2802] text-[#ffa300] p-6 rounded-lg shadow-lg max-w-md w-full">
+          <div className={`${getThemeColor(theme, 'cardBackground')} ${getThemeColor(theme, 'text')} p-6 rounded-lg shadow-lg max-w-md w-full`}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold">Appointment Details</h3>
               <button 
                 onClick={() => setSelectedGridAppointment(null)}
-                className="text-[#ffa300] hover:text-white"
+                className={`${getThemeColor(theme, 'text')} hover:text-white`}
               >
                 <XCircleIcon className="h-6 w-6" />
               </button>
@@ -545,7 +550,7 @@ const StallGrid: React.FC<StallGridProps> = ({
               )}
               <button
                 onClick={() => setSelectedGridAppointment(null)}
-                className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                className={`px-4 py-2 ${getUIColor('button', 'secondary', theme)} rounded ${getUIColor('hover', 'button', theme)}`}
               >
                 Close
               </button>
@@ -615,12 +620,14 @@ function UserSelectionModal({
 }) {
   if (!isOpen) return null;
 
+  const { theme } = useTheme();
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+      <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-md w-full`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-[#ffa300]">Create Appointment</h2>
-          <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+          <h2 className={`text-xl font-bold ${getThemeColor(theme, 'text')}`}>Create Appointment</h2>
+          <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
             <XCircleIcon className="h-6 w-6" />
           </button>
         </div>
@@ -628,17 +635,21 @@ function UserSelectionModal({
         <div className="space-y-4">
           <button
             onClick={onExistingUser}
-            className="w-full bg-[#3e2802] text-[#ffa300] p-4 rounded-lg hover:bg-[#2a1c01] transition-colors flex items-center justify-center space-x-2"
-          >
+            className={`w-full p-4 rounded-lg transition-colors flex items-center justify-center space=x=2
+              ${getUIColor('button', 'primary', theme)}
+              ${getUIColor('hover', 'button', theme)}`}
+            >
             <UserIcon className="h-6 w-6" />
             <span>Existing User</span>
           </button>
 
           <button
             onClick={onNewUser}
-            className="w-full bg-[#3e2802] text-[#ffa300] p-4 rounded-lg hover:bg-[#2a1c01] transition-colors flex items-center justify-center space-x-2"
-          >
-            <UserPlusIcon className="h-6 w-6" />
+            className={`w-full p-4 rounded-lg transition-colors flex items-center justify-center space-x-2
+              ${getUIColor('button', 'primary', theme)}
+              ${getUIColor('hover', 'button', theme)}`}
+            >
+              <UserPlusIcon className="h-6 w-6" />
             <span>New User</span>
           </button>
         </div>
@@ -719,12 +730,14 @@ function ExistingUserSearchModal({
 
   if (!isOpen) return null;
 
+  const { theme } = useTheme();
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+      <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-md w-full`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-[#ffa300]">Search Users</h2>
-          <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+          <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Search Users</h2>
+          <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
             <XCircleIcon className="h-6 w-6" />
           </button>
         </div>
@@ -735,7 +748,7 @@ function ExistingUserSearchModal({
             placeholder="Search by name or email"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-2 pr-10 border border-[#3e2802] rounded-md bg-[#ffffff] text-[#3e2802]"
+            className={`w-full p-2 pr-10 rounded-md border ${getUIColor('form', 'input', theme, 'border')} ${getUIColor('form', 'input', theme, 'background')} ${getUIColor('form', 'input', theme, 'text')}`}
           />
           <MagnifyingGlassIcon className="absolute right-3 top-2.5 h-5 w-5 text-[#3e2802]" />
         </div>
@@ -750,23 +763,23 @@ function ExistingUserSearchModal({
               <button
                 key={user.id}
                 onClick={() => onUserSelect(user)}
-                className="w-full text-left p-3 hover:bg-[#3e2802] rounded-lg mb-2 transition-colors"
+                className={`w-full text-left p-3 rounded-lg mb-2 transition-colors ${getThemeColor(theme, 'surface')} hover:${getUIColor('hover', 'form', theme)}`}
               >
                 <div className="flex items-center">
                   {user.profilePhoto ? (
                     <img src={user.profilePhoto} alt={user.firstName} className="w-10 h-10 rounded-full mr-3" />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#3e2802] flex items-center justify-center mr-3">
-                      <span className="text-[#ffa300] text-lg">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${getThemeColor(theme, 'surface')}`}>
+                      <span className={`${getThemeColor(theme, 'text')}`}>
                         {user.firstName[0]}
                       </span>
                     </div>
                   )}
                   <div>
-                    <div className="text-[#ffa300] font-medium">
+                    <div className={`${getThemeColor(theme, 'text')} font-medium`}>
                       {user.firstName} {user.lastName}
                     </div>
-                    <div className="text-[#ffa300] text-sm opacity-75">
+                    <div className={`${getThemeColor(theme, 'text')} text-sm pacity-75`}>
                       {user.email}
                     </div>
                   </div>
@@ -774,7 +787,7 @@ function ExistingUserSearchModal({
               </button>
             ))}
             {users.length === 0 && searchTerm && (
-              <div className="text-center text-[#ffa300] py-4">
+              <div className={`${getThemeColor(theme, 'text')} text-center py-4`}>
                 No users found
               </div>
             )}
@@ -915,15 +928,17 @@ function NewUserFormModal({
     }
   };
 
+  const { theme } = useTheme();
+
   if (!isOpen) return null;
 
   if (showIntakeForm && createdUser) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto`}>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-[#ffa300]">Complete Intake Form</h2>
-            <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+            <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Complete Intake Form</h2>
+            <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
               <XCircleIcon className="h-6 w-6" />
             </button>
           </div>
@@ -943,10 +958,10 @@ function NewUserFormModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+      <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-md w-full`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-[#ffa300]">Create New User</h2>
-          <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+          <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Create New User</h2>
+          <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
             <XCircleIcon className="h-6 w-6" />
           </button>
         </div>
@@ -959,7 +974,7 @@ function NewUserFormModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${getThemeColor(theme, 'text')}`}>
               Profile Photo
             </label>
             <div className="flex items-center space-x-4">
@@ -970,8 +985,8 @@ function NewUserFormModal({
                   className="w-20 h-20 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-[#3e2802] flex items-center justify-center">
-                  <PhotoIcon className="h-8 w-8 text-[#ffa300]" />
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center ${getThemeColor(theme, 'surface')}`}>
+                  <PhotoIcon className={`h-8 w-8 ${getThemeColor(theme, 'text')}`} />
                 </div>
               )}
               <input
@@ -983,7 +998,7 @@ function NewUserFormModal({
               />
               <label
                 htmlFor="photo-upload"
-                className="px-4 py-2 bg-[#3e2802] text-[#ffa300] rounded-md hover:bg-[#2a1c01] cursor-pointer"
+                className={`px-4 py-2 cursor-pointer rounded-md transition-colors ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`}
               >
                 Choose Photo
               </label>
@@ -991,7 +1006,7 @@ function NewUserFormModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${getThemeColor(theme, 'text')}`}>
               First Name *
             </label>
             <input
@@ -999,12 +1014,15 @@ function NewUserFormModal({
               required
               value={form.firstName}
               onChange={(e) => setForm(prev => ({ ...prev, firstName: e.target.value }))}
-              className="w-full p-2 border border-[#3e2802] rounded-md bg-[#ffffff] text-[#3e2802]"
+              className={`w-full p-2 rounded-md
+                ${getUIColor('form', 'input', theme, 'border')}
+                ${getUIColor('form', 'input', theme, 'background')}
+                ${getUIColor('form', 'input', theme, 'text')}`}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${getThemeColor(theme, 'text')}`}>
               Last Name *
             </label>
             <input
@@ -1012,12 +1030,15 @@ function NewUserFormModal({
               required
               value={form.lastName}
               onChange={(e) => setForm(prev => ({ ...prev, lastName: e.target.value }))}
-              className="w-full p-2 border border-[#3e2802] rounded-md bg-[#ffffff] text-[#3e2802]"
+              className={`w-full p-2 rounded-md
+                ${getUIColor('form', 'input', theme, 'border')}
+                ${getUIColor('form', 'input', theme, 'background')}
+                ${getUIColor('form', 'input', theme, 'text')}`}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${getThemeColor(theme, 'text')}`}>
               Email *
             </label>
             <input
@@ -1025,19 +1046,25 @@ function NewUserFormModal({
               required
               value={form.email}
               onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
-              className="w-full p-2 border border-[#3e2802] rounded-md bg-[#ffffff] text-[#3e2802]"
+              className={`w-full p-2 rounded-md
+                ${getUIColor('form', 'input', theme, 'border')}
+                ${getUIColor('form', 'input', theme, 'background')}
+                ${getUIColor('form', 'input', theme, 'text')}`}            
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#ffa300] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${getThemeColor(theme, 'text')}`}>
               Phone
             </label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))}
-              className="w-full p-2 border border-[#3e2802] rounded-md bg-[#ffffff] text-[#3e2802]"
+              className={`w-full p-2 rounded-md
+                ${getUIColor('form', 'input', theme, 'border')}
+                ${getUIColor('form', 'input', theme, 'background')}
+                ${getUIColor('form', 'input', theme, 'text')}`}            
             />
           </div>
 
@@ -1045,14 +1072,14 @@ function NewUserFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-[#ffa300] text-[#ffa300] rounded-md hover:bg-[#ffa300] hover:text-[#1e1b1b]"
+              className={`px-4 py-2 rounded-md border ${getThemeColor(theme, 'border')} ${getThemeColor(theme, 'text')} hover:bg-[#ffa300] hover:text-[#1e1b1b]`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded-md hover:bg-[#ffb733] disabled:opacity-50"
+              className={`px-4 py-2 rounded-md transition-colors ${getUIColor('button', 'secondary', theme)} ${getUIColor('hover', 'button', theme)} disabled:opacity-50`}
             >
               {loading ? 'Creating...' : 'Create User'}
             </button>
@@ -1294,14 +1321,16 @@ function AppointmentBookingModal({
     }
   };
 
+  const { theme } = useTheme();
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+      <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-md w-full`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-[#ffa300]">Book Appointment for {user.firstName}</h2>
-          <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+          <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Book Appointment for {user.firstName}</h2>
+          <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
             <XCircleIcon className="h-6 w-6" />
           </button>
         </div>
@@ -1314,11 +1343,11 @@ function AppointmentBookingModal({
 
         <div className="space-y-4">
           {selectedTimeSlot && (
-            <div className="bg-[#3e2802] p-4 rounded-lg">
-              <h3 className="text-[#ffa300] font-medium mb-2">Selected Time Slot</h3>
-              <p className="text-white">Time: {selectedTimeSlot.time}</p>
+            <div className={`${getThemeColor(theme, 'surface')} p-4 rounded-lg`}>
+              <h3 className={`${getThemeColor(theme, 'text')} font-medium mb-2`}>Selected Time Slot</h3>
+              <p className={getThemeColor(theme, 'textWhite')}>Time: {selectedTimeSlot.time}</p>
               {stallData && (
-                <p className="text-white capitalize mt-1">Service: {stallData.serviceType}</p>
+                <p className={`${getThemeColor(theme, 'textWhite')} capitalize mt-1`}>Service: {stallData.serviceType}</p>
               )}
             </div>
           )}
@@ -1327,7 +1356,9 @@ function AppointmentBookingModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-[#ffa300] text-[#ffa300] rounded-md hover:bg-[#ffa300] hover:text-[#1e1b1b]"
+              className={`px-4 py-2 border rounded-md hover:bg-[@ffa300] hover:text-[#1e1b1b]
+                ${getThemeColor(theme, 'border')}
+                ${getThemeColor(theme, 'text')}`}
             >
               Cancel
             </button>
@@ -1335,7 +1366,9 @@ function AppointmentBookingModal({
               type="button"
               onClick={handleCreateAppointment}
               disabled={loading || !selectedTimeSlot || !selectedService}
-              className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded-md hover:bg-[#ffb733] disabled:opacity-50"
+              className={`px-4 py-2 rounded-md disabled:opacity-50
+                ${getUIColor('button', 'primary', theme)}
+                ${getUIColor('hover', 'button', theme)}`}
             >
               {loading ? 'Creating...' : 'Create Appointment'}
             </button>
@@ -1426,6 +1459,8 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
     { value: 'out_of_order', label: 'Out of Order' }
   ];
 
+  const { theme } = useTheme();
+
   return (
     <>
       <div 
@@ -1439,12 +1474,12 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
       {/* Status Selection Modal */}
       {showStatusMenu && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#1e1b1b] rounded-lg p-6 w-full max-w-sm">
+          <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 w-full max-w-sm`}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-[#ffa300]">Update Status: {stall.name}</h3>
+              <h3 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Update Status: {stall.name}</h3>
               <button 
                 onClick={() => setShowStatusMenu(false)}
-                className="text-[#ffa300] hover:text-[#ffb733]"
+                className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}
               >
                 <XCircleIcon className="h-6 w-6" />
               </button>
@@ -1457,7 +1492,7 @@ const StallStatusCard: React.FC<StallStatusCardProps> = ({ stall, onStatusChange
                   className={`w-full p-3 rounded-lg text-left transition-colors ${
                     value === stall.status
                       ? 'bg-[#ffa300] text-[#1e1b1b]'
-                      : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                      : `${getThemeColor(theme, 'surface')} ${getThemeColor(theme, 'text')} hover:bg-[#2a1f02]`
                   }`}
                   onClick={() => {
                     onStatusChange(stall.id, value);
@@ -1490,9 +1525,11 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
     (selectedTrailerId === null || stall.trailerGroup === selectedTrailerId)
   );
 
+  const { theme } = useTheme();
+
   return (
     <div className="mt-8">
-      <h2 className="text-xl font-bold text-[#ffa300] mb-4">Stall Status</h2>
+      <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')} mb-4`}>Stall Status</h2>
       
       {/* Service Type Toggle */}
       <div className="flex space-x-4 mb-4">
@@ -1504,7 +1541,7 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
           className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
             selectedService === 'shower'
               ? 'bg-[#ffa300] text-[#1e1b1b]'
-              : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+              : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
           }`}
         >
           Showers
@@ -1517,7 +1554,7 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
           className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
             selectedService === 'laundry'
               ? 'bg-[#ffa300] text-[#1e1b1b]'
-              : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1c01]'
+              : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
           }`}
         >
           Laundry
@@ -1531,7 +1568,7 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             selectedTrailerId === null
               ? 'bg-[#ffa300] text-[#1e1b1b]'
-              : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+              : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
           }`}
         >
           All Trailers
@@ -1551,7 +1588,7 @@ const StallStatusSection: React.FC<StallStatusSectionProps> = ({ stalls, trailer
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedTrailerId === trailer.id
                   ? 'bg-[#ffa300] text-[#1e1b1b]'
-                  : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                  : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
               }`}
             >
               {trailer.name}
@@ -1723,14 +1760,17 @@ const AdminControls = () => {
       setIsChecking(false);
     }
   };
+
+  const { theme } = useTheme();
   
   return (
-    <div className="mb-6 p-4 bg-[#3e2802] rounded-lg">
-      <h2 className="text-lg font-semibold text-[#ffa300] mb-4">Admin Controls</h2>
+    <div className={`mb-6 p-4 rounded-lg ${getThemeColor(theme, 'surface')}`}>
+      <h2 className={`text-lg font-semibold mb-4 ${getThemeColor(theme, 'textHeader')}`}>Admin Controls</h2>
       <button
         onClick={handleCheckPastAppointments}
         disabled={isChecking}
-        className="px-4 py-2 bg-[#ffa300] text-[#3e2802] rounded-lg hover:bg-[#ffb733] disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+          ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`}
       >
         {isChecking ? 'Processing...' : 'Process Past Appointments'}
       </button>
@@ -2477,26 +2517,28 @@ function AdminDashboardContent() {
 
     if (!isOpen) return null;
 
+    const { theme } = useTheme();
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-[#1e1b1b] rounded-lg p-6 max-w-md w-full">
+        <div className={`${getThemeColor(theme, 'cardBackground')} rounded-lg p-6 max-w-md w-full`}>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-[#ffa300]">Assign Stall</h2>
-            <button onClick={onClose} className="text-[#ffa300] hover:text-[#ffb733]">
+            <h2 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Assign Stall</h2>
+            <button onClick={onClose} className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733]`}>
               <XCircleIcon className="h-6 w-6" />
             </button>
           </div>
 
           <div className="space-y-4">
-            <div className="bg-[#3e2802] p-4 rounded-lg">
-              <h3 className="text-[#ffa300] font-medium mb-2">Appointment Details</h3>
+            <div className={`${getThemeColor(theme, 'cardBackground')} border border-gray-700 p-4 rounded-lg`}>
+              <h3 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Appointment Details</h3>
               <p className="text-white">Customer: {appointment.userName}</p>
               <p className="text-white">Service: {appointment.serviceType}</p>
               <p className="text-white">Time: {formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
             </div>
 
             <div>
-              <h3 className="text-[#ffa300] font-medium mb-2">Available Stalls</h3>
+              <h3 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Available Stalls</h3>
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {availableStalls.length > 0 ? (
                   availableStalls.map(stall => (
@@ -2505,15 +2547,15 @@ function AdminDashboardContent() {
                       onClick={() => setSelectedStallId(stall.id)}
                       className={`w-full p-3 rounded-lg text-left transition-colors ${
                         selectedStallId === stall.id
-                          ? 'bg-[#ffa300] text-[#1e1b1b]'
-                          : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                          ? getUIColor('button', 'highlighted', theme)
+                          : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
                       }`}
                     >
                       {stall.name}
                     </button>
                   ))
                 ) : (
-                  <p className="text-[#ffa300] text-center py-4">No available stalls for this service type</p>
+                  <p className={`${getThemeColor(theme, 'textHeader')} text-center py-4`}>No available stalls for this service type</p>
                 )}
               </div>
             </div>
@@ -2521,14 +2563,14 @@ function AdminDashboardContent() {
             <div className="flex justify-end space-x-3 pt-4">
               <button
                 onClick={onClose}
-                className="px-4 py-2 border border-[#ffa300] text-[#ffa300] rounded-md hover:bg-[#ffa300] hover:text-[#1e1b1b]"
+                className={`px-4 py-2 border rounded-md ${getThemeColor(theme, 'border')} ${getThemeColor(theme, 'text')} hover:bg-[#ffa300] hover:text-[#1e1b1b]`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleAssign}
                 disabled={!selectedStallId || loading}
-                className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded-md hover:bg-[#ffb733] disabled:opacity-50"
+                className={`px-4 py-2 rounded-md ${getUIColor('button', 'primary', theme)} hover:bg-[#ffb733] disabled:opacity-50`}
               >
                 {loading ? 'Assigning...' : 'Assign Stall'}
               </button>
@@ -2609,9 +2651,11 @@ function AdminDashboardContent() {
     }
   };
 
+  const { theme } = useTheme();
+
   // Return the JSX for the component
   return (
-    <div className="min-h-screen bg-[#1e1b1b] pt-24">
+    <div className={`${getThemeColor(theme, 'background')} min-h-screen pt-24`}>
       <UserSelectionModal
         isOpen={showUserSelectionModal}
         onClose={() => setShowUserSelectionModal(false)}
@@ -2657,28 +2701,27 @@ function AdminDashboardContent() {
 
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-[#ffa300]">Admin Dashboard</h1>
-          
+          <h1 className={`text-2xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Admin Dashboard</h1>
           {/* Date Navigation */}
           <div className="flex items-center space-x-4">
             <button 
               onClick={handlePrevDay}
-              className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+              className={`p-2 rounded-full ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`}
             >
               <ChevronLeftIcon className="h-5 w-5" />
             </button>
-            <span className="text-[#ffa300] font-medium">
+            <span className={`${getThemeColor(theme, 'text')} font-medium`}>
               {format(selectedDate, 'EEEE, MMMM d, yyyy')}
             </span>
             <button 
               onClick={handleNextDay}
-              className="p-2 rounded-full bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200"
+              className={`p-2 rounded-full ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`} 
             >
               <ChevronRightIcon className="h-5 w-5" />
             </button>
             <button 
               onClick={handleToday}
-              className="px-3 py-1 rounded-md bg-[#3e2802] hover:bg-[#2a1c01] text-[#ffa300] transition-colors duration-200 text-sm"
+              className={`px-3 py-1 rounded-md text-sm ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`}
             >
               Today
             </button>
@@ -2687,29 +2730,30 @@ function AdminDashboardContent() {
         
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left side - Appointments for selected date */}
-          <div className="w-full lg:w-1/4 lg:min-w-[300px] bg-[#1e1b1b]">
+          <div className={`w-full lg:w-1/4 lg:min-w-[300px] ${getThemeColor(theme, 'background')}`}>
             <button
               onClick={() => setShowUserSelectionModal(true)}
-              className="w-full px-4 py-2 mb-4 bg-[#ffa300] text-[#1e1b1b] rounded-lg hover:bg-[#ffb733] transition-colors flex items-center justify-center space-x-2"
+              className={`w-full px-4 py-2 mb-4 rounded-lg border-2 border-[#ffa300] transition-colors flex items-center justify-center space-x-2 ${getUIColor('button', 'secondary', theme)} ${getUIColor('hover', 'button', theme)}`}
             >
               <UserPlusIcon className="h-5 w-5" />
               <span>Create Appointment</span>
             </button>
 
-            <h2 className="text-xl font-bold mb-4 text-[#ffa300]">Appointments for {format(selectedDate, 'MMMM d, yyyy')}</h2>
+            <h2 className={`text-xl font-bold mb-4 ${getThemeColor(theme, 'textHeader')}`}>Appointments for {format(selectedDate, 'MMMM d, yyyy')}</h2>
             <div className="space-y-4 max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Assigned Appointments */}
               <div>
-                <h3 className="text-lg font-semibold text-[#ffa300] mb-2">Assigned Appointments</h3>
+                <h3 className={`text-lg font-semibold mb-2 ${getThemeColor(theme, 'textHeader')}`}>Assigned Appointments</h3>
                 <div className="space-y-2">
                   {todayAppointments
                     .filter(appointment => appointment.stallId && appointment.stallId !== 'Unassigned')
                     .map((appointment) => (
                       <div key={appointment.id}>
                         <div 
-                          className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
-                            selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
-                          }`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors duration-200
+                            ${getThemeColor(theme, 'surface')}
+                            ${getUIColor('hover', 'form', theme)}
+                            ${selectedAppointment?.id === appointment.id ? `${getThemeColor(theme, 'border')} border-2` : ''}`}
                           onClick={() => {
                             if (selectedAppointment?.id === appointment.id) {
                               setSelectedAppointment(null);
@@ -2720,9 +2764,9 @@ function AdminDashboardContent() {
                         >
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
-                              <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
-                              <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
+                              <p className={`font-medium ${getThemeColor(theme, 'textHeader')}`}>{appointment.userName}</p>
+                              <p className={`${getThemeColor(theme, 'textWhite')} text-sm`}>{formatTimeForDisplay(appointment.startTime)}</p>
+                              <p className={`${getThemeColor(theme, 'textWhite')} capitalize text-sm`}>{appointment.serviceType}</p>
                             </div>
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
@@ -2743,23 +2787,23 @@ function AdminDashboardContent() {
                                 : 'max-h-0 opacity-0'
                             }`}
                           >
-                            <div className="bg-[#2a1f02] p-4 rounded-lg">
+                            <div className={`${getThemeColor(theme, 'surface')} p-4 rounded-lg`}>
                               <div className="space-y-4">
                                 <div>
-                                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
-                                  <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
+                                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Customer Information</h4>
+                                  <p className={`${getThemeColor(theme, 'textWhite')} font-medium capitalize`}>{appointment.userName || 'Unknown User'}</p>
                                 </div>
                                 
                                 <div>
-                                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Appointment Details</h4>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
                                       <p className="text-sm text-gray-400">Service Type</p>
-                                      <p className="text-white capitalize">{appointment.serviceType}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')} capitalize`}>{appointment.serviceType}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Time</p>
-                                      <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')}`}>{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Status</p>
@@ -2775,17 +2819,17 @@ function AdminDashboardContent() {
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Stall</p>
-                                      <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')}`}>{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Trailer</p>
-                                      <p className="text-white">
+                                      <p className={`${getThemeColor(theme, 'textWhite')}`}>
                                         {trailers.find(t => t.id === appointment.trailerId)?.name || 'Unknown Trailer'}
                                       </p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Created</p>
-                                      <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')} text-sm`}>{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -2836,7 +2880,7 @@ function AdminDashboardContent() {
                                     e.stopPropagation();
                                     setSelectedAppointment(null);
                                   }}
-                                  className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                                  className={`px-4 py-2 rounded ${getThemeColor(theme, 'background')} ${getThemeColor(theme, 'text')} hover:bg-[#2a2525]}`}
                                 >
                                   Close
                                 </button>
@@ -2851,16 +2895,17 @@ function AdminDashboardContent() {
 
               {/* Unassigned Appointments */}
               <div>
-                <h3 className="text-lg font-semibold text-[#ffa300] mb-2">Unassigned Appointments</h3>
+                <h3 className={`text-lg font-semibold ${getThemeColor(theme, 'textHeader')} mb-2`}>Unassigned Appointments</h3>
                 <div className="space-y-2">
                   {todayAppointments
                     .filter(appointment => !appointment.stallId || appointment.stallId === 'Unassigned')
                     .map((appointment) => (
                       <div key={appointment.id}>
-                        <div 
-                          className={`bg-[#3e2802] p-3 rounded-lg cursor-pointer hover:bg-[#2a1f02] ${
-                            selectedAppointment?.id === appointment.id ? 'border-2 border-[#ffa300]' : ''
-                          }`}
+                        <div
+                          className={`
+                            ${getThemeColor(theme, 'surface')} p-3 rounded-lg cursor-pointer
+                            ${getUIColor('hover', 'table', theme)}
+                            ${selectedAppointment?.id === appointment.id ? `border-2 border-[#ffa300]` : ''}`}
                           onClick={() => {
                             if (selectedAppointment?.id === appointment.id) {
                               setSelectedAppointment(null);
@@ -2879,9 +2924,9 @@ function AdminDashboardContent() {
                         >
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="text-[#ffa300] font-medium">{appointment.userName}</p>
-                              <p className="text-white text-sm">{formatTimeForDisplay(appointment.startTime)}</p>
-                              <p className="text-white capitalize text-sm">{appointment.serviceType}</p>
+                              <p className={`${getThemeColor(theme, 'textHeader')} font-medium`}>{appointment.userName}</p>
+                              <p className={`${getThemeColor(theme, 'textWhite')} text-sm`}>{formatTimeForDisplay(appointment.startTime)}</p>
+                              <p className={`${getThemeColor(theme, 'textWhite')} capitalize text-sm`}>{appointment.serviceType}</p>
                             </div>
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               appointment.status === 'scheduled' ? 'bg-blue-500 text-white' :
@@ -2902,23 +2947,23 @@ function AdminDashboardContent() {
                                 : 'max-h-0 opacity-0'
                             }`}
                           >
-                            <div className="bg-[#2a1f02] p-4 rounded-lg">
+                            <div className={`${getThemeColor(theme, 'surface')} p-4 rounded-lg`}>
                               <div className="space-y-4">
                                 <div>
-                                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
-                                  <p className="text-white font-medium capitalize">{appointment.userName || 'Unknown User'}</p>
+                                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Customer Information</h4>
+                                  <p className={`${getThemeColor(theme, 'textWhite')} font-medium capitalize`}>{appointment.userName || 'Unknown User'}</p>
                                 </div>
                                 
                                 <div>
-                                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Appointment Details</h4>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
                                       <p className="text-sm text-gray-400">Service Type</p>
-                                      <p className="text-white capitalize">{appointment.serviceType}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')} capitalize`}>{appointment.serviceType}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Time</p>
-                                      <p className="text-white">{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
+                                      <p className={getThemeColor(theme, 'textWhite')}>{formatTimeForDisplay(appointment.startTime)} - {formatTimeForDisplay(appointment.endTime)}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Status</p>
@@ -2934,17 +2979,17 @@ function AdminDashboardContent() {
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Stall</p>
-                                      <p className="text-white">{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
+                                      <p className={getThemeColor(theme, 'textWhite')}>{appointment.stallName || `Stall ${appointment.stallId.substring(0, 4)}`}</p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Trailer</p>
-                                      <p className="text-white">
+                                      <p className={getThemeColor(theme, 'textWhite')}>
                                         {trailers.find(t => t.id === appointment.trailerId)?.name || 'Unknown Trailer'}
                                       </p>
                                     </div>
                                     <div>
                                       <p className="text-sm text-gray-400">Created</p>
-                                      <p className="text-white text-sm">{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                                      <p className={`${getThemeColor(theme, 'textWhite')} text-sm`}>{format(new Date(appointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -2956,7 +3001,7 @@ function AdminDashboardContent() {
                                     setSelectedAppointmentForAssignment(appointment);
                                     setShowStallAssignmentModal(true);
                                   }}
-                                  className="px-4 py-2 bg-[#ffa300] text-[#1e1b1b] rounded hover:bg-[#ffb733]"
+                                  className={`px-4 py-2 rounded ${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`}
                                 >
                                   Assign Stall
                                 </button>
@@ -2971,7 +3016,7 @@ function AdminDashboardContent() {
                                     e.stopPropagation();
                                     setSelectedAppointment(null);
                                   }}
-                                  className="px-4 py-2 bg-[#1e1b1b] text-[#ffa300] rounded hover:bg-[#2a2525]"
+                                  className={`px-4 py-2 rounded ${getUIColor('button', 'secondary', theme)} ${getUIColor('hover', 'button', theme)}`}
                                 >
                                   Close
                                 </button>
@@ -2987,7 +3032,7 @@ function AdminDashboardContent() {
           </div>
           
           {/* Right side - Service Toggle and Stall Grid */}
-          <div className="flex-1 bg-[#1e1b1b] min-w-0">
+          <div className={`flex-1 ${getThemeColor(theme, 'background')} min-w-0`}>
             {/* Service Type Toggle Buttons */}
             <div className="flex space-x-4 mb-4">
               <button
@@ -2998,7 +3043,7 @@ function AdminDashboardContent() {
                 className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
                   selectedService === 'shower'
                     ? 'bg-[#ffa300] text-[#1e1b1b]'
-                    : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                    : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
                 }`}
               >
                 Showers
@@ -3011,7 +3056,7 @@ function AdminDashboardContent() {
                 className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
                   selectedService === 'laundry'
                     ? 'bg-[#ffa300] text-[#1e1b1b]'
-                    : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1c01]'
+                    : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
                 }`}
               >
                 Laundry
@@ -3025,7 +3070,7 @@ function AdminDashboardContent() {
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   selectedTrailerId === null
                     ? 'bg-[#ffa300] text-[#1e1b1b]'
-                    : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                    : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
                 }`}
               >
                 All Trailers
@@ -3045,7 +3090,7 @@ function AdminDashboardContent() {
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       selectedTrailerId === trailer.id
                         ? 'bg-[#ffa300] text-[#1e1b1b]'
-                        : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1f02]'
+                        : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
                     }`}
                   >
                     {trailer.name}
@@ -3083,33 +3128,33 @@ function AdminDashboardContent() {
         {/* Mobile appointment details modal */}
         {selectedAppointment && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 md:hidden">
-            <div className="bg-[#1e1b1b] border border-[#ffa300] p-6 rounded-lg shadow-lg max-w-md w-full">
+            <div className={`${getThemeColor(theme, 'background')} border ${getThemeColor(theme, 'border')} p-6 rounded-lg shadow-lg max-w-md w-full`}>
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-[#ffa300]">Appointment Details</h3>
+                <h3 className={`text-xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Appointment Details</h3>
                 <button 
                   onClick={closeAppointmentDetails}
-                  className="text-[#ffa300] hover:text-[#ffb733] transition-colors"
+                  className={`${getThemeColor(theme, 'text')} hover:text-[#ffb733] transition-colors`}
                 >
                   <XCircleIcon className="h-6 w-6" />
                 </button>
               </div>
               
               <div className="space-y-4">
-                <div className="bg-[#2a1f02] p-4 rounded-lg">
-                  <h4 className="text-[#ffa300] font-medium mb-2">Customer Information</h4>
-                  <p className="text-white font-medium capitalize">{selectedAppointment.userName || 'Unknown User'}</p>
+                <div className={`${getThemeColor(theme, 'surface')} p-4 rounded-lg`}>
+                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Customer Information</h4>
+                  <p className={`${getThemeColor(theme, 'textWhite')} font-medium capitalize`}>{selectedAppointment.userName || 'Unknown User'}</p>
                 </div>
                 
-                <div className="bg-[#2a1f02] p-4 rounded-lg">
-                  <h4 className="text-[#ffa300] font-medium mb-2">Appointment Details</h4>
+                <div className={`${getThemeColor(theme, 'surface')} p-4 rounded-lg`}>
+                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Appointment Details</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-sm text-gray-400">Service Type</p>
-                      <p className="text-white capitalize">{selectedAppointment.serviceType}</p>
+                      <p className={`${getThemeColor(theme, 'textWhite')} capitalize`}>{selectedAppointment.serviceType}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Time</p>
-                      <p className="text-white">{formatTimeForDisplay(selectedAppointment.startTime)} - {formatTimeForDisplay(selectedAppointment.endTime)}</p>
+                      <p className={`${getThemeColor(theme, 'textWhite')}`}>{formatTimeForDisplay(selectedAppointment.startTime)} - {formatTimeForDisplay(selectedAppointment.endTime)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Status</p>
@@ -3125,23 +3170,23 @@ function AdminDashboardContent() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Stall</p>
-                      <p className="text-white">{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
+                      <p className={`${getThemeColor(theme, 'textWhite')}`}>{selectedAppointment.stallName || `Stall ${selectedAppointment.stallId.substring(0, 4)}`}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Trailer</p>
-                      <p className="text-white">
+                      <p className={`${getThemeColor(theme, 'textWhite')}`}>
                         {trailers.find(t => t.id === selectedAppointment.trailerId)?.name || 'Unknown Trailer'}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Created</p>
-                      <p className="text-white text-sm">{format(new Date(selectedAppointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                      <p className={`${getThemeColor(theme, 'textWhite')} text-sm`}>{format(new Date(selectedAppointment.createdAt), 'MMM d, yyyy h:mm a')}</p>
                     </div>
                   </div>
                 </div>
                 
-                <div className="bg-[#2a1f02] p-4 rounded-lg">
-                  <h4 className="text-[#ffa300] font-medium mb-2">Actions</h4>
+                <div className={`${getThemeColor(theme, 'surface')} rounded-lg`}>
+                  <h4 className={`${getThemeColor(theme, 'textHeader')} font-medium mb-2`}>Actions</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {selectedAppointment.status === 'scheduled' && (
                       <button 
@@ -3187,7 +3232,7 @@ function AdminDashboardContent() {
                         e.stopPropagation();
                         setSelectedAppointment(null);
                       }}
-                      className="p-2 bg-[#1e1b1b] text-[#ffa300] rounded-lg hover:bg-[#2a2525] transition-colors"
+                      className={`p-2 rounded-lg transition-colors ${getThemeColor(theme, 'background')} ${getThemeColor(theme, 'text')} hover:bg-[#2a2525]`}
                     >
                       Close
                     </button>
@@ -3218,11 +3263,12 @@ function AdminDashboardContent() {
 // Main component that wraps the content in Suspense
 export default function AdminDashboardPage() {
   const { authorized, loading } = useAdminGuard();
+  const { theme } = useTheme();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
+      <div className={`flex items-center justify-center min-h-screen ${getThemeColor(theme, 'background')}`}>
+        <div className={`text-xl ${getThemeColor(theme, 'textHeader')}`}>Loading...</div>
       </div>
     );
   }
@@ -3231,8 +3277,8 @@ export default function AdminDashboardPage() {
   
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1b1b]">
-        <div className="text-xl text-[#ffa300]">Loading...</div>
+      <div className={`flex items-center justify-center min-h-screen ${getThemeColor(theme, 'background')}`}>
+        <div className={`text-xl ${getThemeColor(theme, 'textHeader')}`}>Loading...</div>
       </div>
     }>
       <AdminDashboardContent />

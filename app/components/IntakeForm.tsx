@@ -67,6 +67,13 @@ export default function IntakeForm({ onSubmit, onCancel, initialUserData }: Inta
     setPhone(formatted);
   };
 
+  const employmentBarrierLabels: { [key: string]: string } = {
+    transportation: 'Transportation',
+    housing: 'Housing',
+    background: 'Background',
+    criminalHistory: 'Criminal History'
+  };
+
   const handleSubmit = async () => {
     const userData: Partial<User> = {
       firstName,
@@ -502,7 +509,7 @@ export default function IntakeForm({ onSubmit, onCancel, initialUserData }: Inta
                   ${getUIColor('form', 'input', theme, 'text')}`}
               />
               <span className={getThemeColor(theme, 'text')}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}
+                {employmentBarrierLabels[key] || key}
               </span>
             </label>
           ))}
