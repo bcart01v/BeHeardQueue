@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { generateCompanySignupLink } from '@/lib/utils';
+import { useTheme } from '@/app/context/ThemeContext';
+import { getThemeColor, getUIColor } from '@/app/colors';
 
 interface CompanySignupLinkProps {
   companyId: string;
@@ -10,6 +12,7 @@ interface CompanySignupLinkProps {
 
 export default function CompanySignupLink({ companyId, companyName }: CompanySignupLinkProps) {
   const [copied, setCopied] = useState(false);
+  const { theme } = useTheme();
   
   const signupLink = generateCompanySignupLink(companyId);
   
@@ -28,9 +31,9 @@ export default function CompanySignupLink({ companyId, companyName }: CompanySig
   };
   
   return (
-    <div className="bg-white shadow rounded-lg p-6 mb-6">
-      <h3 className="text-lg font-medium text-black mb-2">Company Signup Link</h3>
-      <p className="text-sm text-black mb-4">
+    <div className={`shadow rounded-lg p-6 mb-6 ${getThemeColor(theme, 'cardBackground')}`}>
+      <h3 className={`text-lg font-medium mb-2 ${getThemeColor(theme, 'text')}`}>Company Signup Link</h3>
+      <p className={`text-sm mb-4 ${getThemeColor(theme, 'text')}`}>
         Share this link with users to allow them to sign up and automatically join {companyName}.
       </p>
       
@@ -39,7 +42,8 @@ export default function CompanySignupLink({ companyId, companyName }: CompanySig
           type="text"
           readOnly
           value={signupLink}
-          className="flex-1 p-2 border border-gray-300 rounded-md text-black text-sm"
+          className={`flex-1 p-2 rounded-md text-sm
+            ${theme === 'dark' ? 'bg-[#1e1b1b] text-[#ffa300] border border-white' : 'bg-white text-amber-900 border border-amber-900'}`}
         />
         <button
           onClick={handleCopyLink}
@@ -49,7 +53,7 @@ export default function CompanySignupLink({ companyId, companyName }: CompanySig
         </button>
       </div>
       
-      <div className="mt-4 text-sm text-black">
+      <div className={`mt-4 text-sm ${getThemeColor(theme, 'text')}`}>
         <p>When users click this link, they will be directed to the signup page with your company pre-selected.</p>
       </div>
     </div>

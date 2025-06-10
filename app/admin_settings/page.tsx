@@ -645,7 +645,7 @@ export default function AdminPage() {
       <div className="flex flex-col md:flex-row mt-16">
         {/* Sidebar Navigation */}
         <div className={`${mobileMenuOpen ? 'block' : 'hidden'} md:block w-full md:w-48 ${getThemeColor(theme, 'primary')} shadow-lg md:fixed md:h-[calc(100vh-4rem)] md:top-16 z-10`}>
-          <div className="p-3">
+          <div className="p-3 mt-8">
             <h2 className={`text-lg font-bold ${getThemeColor(theme, 'textHeader')} mb-4`}>Admin Panel</h2>
             <nav className="space-y-1">
               <button

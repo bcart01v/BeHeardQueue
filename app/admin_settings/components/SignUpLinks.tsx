@@ -1,5 +1,7 @@
 import { Company } from '@/types/company';
 import CompanySignupLink from './CompanySignupLink';
+import { useTheme } from '@/app/context/ThemeContext';
+import { getThemeColor, getUIColor } from '@/app/colors';
 
 interface SignUpLinksProps {
   companies: Company[];
@@ -12,22 +14,25 @@ export default function SignUpLinks({
   currentCompany,
   setCurrentCompany
 }: SignUpLinksProps) {
+
+  const { theme } = useTheme();
+
   return (
-    <section className="bg-[#ffa300] rounded-lg shadow p-6">
+    <section className={`rounded-lg shadow p-6 ${getThemeColor(theme, 'cardBackground')}`}>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-[#3e2802]">Sign Up Links</h2>
+        <h2 className={`text-2xl font-bold ${getThemeColor(theme, 'textHeader')}`}>Sign Up Links</h2>
       </div>
 
       {/* Company Selector for Sign Up Links */}
       <div className="mb-6">
-        <h3 className="text-lg font-medium text-[#3e2802] mb-2">Filter by Company</h3>
+        <h3 className={`text-lg font-medium mb-2 ${getThemeColor(theme, 'textHeader')}`}>Filter by Company</h3>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setCurrentCompany(null)}
-            className={`px-4 py-2 rounded-md ${
+            className={`px-4 py-2 rounded-md transition-colors ${
               currentCompany === null
-                ? 'bg-[#1e1b1b] text-white' 
-                : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1c01]'
+                ? getUIColor('button', 'secondary', theme)
+                : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
             }`}
           >
             All Companies
@@ -36,10 +41,10 @@ export default function SignUpLinks({
             <button
               key={company.id}
               onClick={() => setCurrentCompany(company)}
-              className={`px-4 py-2 rounded-md ${
-                currentCompany?.id === company.id 
-                  ? 'bg-[#1e1b1b] text-white' 
-                  : 'bg-[#3e2802] text-[#ffa300] hover:bg-[#2a1c01]'
+              className={`px-4 py-2 rounded-md transition-colors ${
+                currentCompany?.id === company.id
+                  ? getUIColor('button', 'secondary', theme)
+                  : `${getUIColor('button', 'primary', theme)} ${getUIColor('hover', 'button', theme)}`
               }`}
             >
               {company.name}
@@ -53,8 +58,8 @@ export default function SignUpLinks({
         {companies
           .filter(company => currentCompany ? company.id === currentCompany.id : true)
           .map((company) => (
-            <div key={company.id} className="bg-[#1e1b1b] border-2 border-white rounded-lg p-4 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#ffa300] mb-2">{company.name}</h3>
+            <div key={company.id} className={`rounded-lg p-4 border-2 shadow-sm ${getThemeColor(theme, 'background')} ${getThemeColor(theme, 'border')}`}>
+              <h3 className={`text-lg font-semibold mb-2 ${getThemeColor(theme, 'text')}`}>{company.name}</h3>
               <CompanySignupLink 
                 companyId={company.id} 
                 companyName={company.name} 
